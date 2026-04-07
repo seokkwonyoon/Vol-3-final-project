@@ -1,0 +1,322 @@
+\documentclass[11pt]{article}
+
+\usepackage{graphicx}
+\usepackage{amsmath, amssymb, amsthm, bm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{hyperref}
+
+\geometry{margin=1in}
+\setstretch{1.15}
+
+\title{Modeling the Conditional Information Coefficient}
+\author{Draper Conner \and Seokkwon Yoon}
+\date{April 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The Information Coefficient (IC) is a standard measure of predictive signal quality in quantitative finance, typically treated as a constant scalar summarizing the average cross-sectional correlation between predicted and realized returns. In practice, however, predictive power may depend on signal strength and may vary over time. In this paper, we study a conditional and time-varying version of the IC, denoted $IC_t(z)$, where $z$ represents standardized signal strength. We compare three approaches: a traditional constant-IC baseline, a simple binning estimator, and a Kalman filter state-space model. The first two provide familiar and interpretable benchmarks, while the Kalman filter allows dynamic estimation of the signal--return relationship over time. We then evaluate whether these conditional estimates improve portfolio construction relative to the traditional constant-IC framework through simulated mean--variance portfolio experiments.
+\end{abstract}
+
+\section{Introduction}
+
+In quantitative asset management, the Information Coefficient (IC) is one of the most widely used measures of forecast quality. Traditionally, IC is defined as the cross-sectional correlation between a predictive signal and subsequent realized returns. In many applications, this quantity is treated as a constant, or at least summarized by a long-run average such as $IC = 0.05$.
+
+While this simplification is convenient, it may conceal an important feature of many predictive signals: forecast quality may depend on the magnitude of the signal itself. Intuitively, signals near zero may contain little information, while signals with large absolute value may correspond to higher-conviction opportunities. This suggests that predictive strength should be studied conditionally on signal magnitude, rather than only through a single unconditional summary statistic.
+
+The goal of this paper is to study a dynamic conditional Information Coefficient, denoted
+\[
+IC_t(z),
+\]
+where $z$ is a standardized signal value and $t$ represents time. We ask two main questions:
+\begin{enumerate}[label=(\roman*)]
+    \item Does predictive power vary as a function of signal strength?
+    \item If so, can this conditional information improve portfolio construction relative to a constant-IC benchmark?
+\end{enumerate}
+
+To answer these questions, we compare three approaches. First, we use a traditional benchmark in which the IC is fixed at $0.05$. Second, we estimate conditional predictive strength using a simple binning procedure. Third, we introduce a state-space approach based on the Kalman filter, which allows a parsimonious and time-varying representation of the signal--return relationship.
+
+Finally, we use each approach to generate expected returns for a mean--variance portfolio optimization problem, allowing us to compare their economic value in a simulated investment setting.
+
+\section{Background and Problem Setup}
+
+Let $z_{i,t}$ denote the standardized signal for asset $i$ at time $t$, and let $r_{i,t+1}$ denote its realized next-period return. The traditional cross-sectional IC at time $t$ is
+\[
+IC_t = \mathrm{Corr}\big(z_{i,t}, r_{i,t+1}\big),
+\]
+computed across assets $i=1,\dots,N_t$.
+
+In the classical approach, one often assumes that the signal has a fixed average predictive quality and summarizes it by a scalar, for example
+\[
+IC = 0.05.
+\]
+This corresponds to the idea that the signal is modestly informative on average, but it does not distinguish between weak and strong realizations of the signal.
+
+Our hypothesis is that predictive strength depends on signal magnitude. Specifically, we are interested in the conditional structure
+\[
+IC_t(z),
+\]
+or, more broadly, the relationship between signal strength and expected return,
+\[
+\mu_t(z) := \mathbb{E}[r_{i,t+1}\mid z_{i,t}=z].
+\]
+In practice, the latter is often more stable and easier to estimate directly. Once $\mu_t(z)$ is estimated, it can be used as an input into portfolio optimization.
+
+\section{Methods for Estimating Conditional Predictive Strength}
+
+In this section, we describe the three approaches considered in this paper.
+
+\subsection{Method 0: Constant IC Baseline}
+
+The simplest benchmark assumes that the signal has constant predictive quality:
+\[
+IC_t(z) \equiv 0.05.
+\]
+This does not explicitly model dependence on $z$ or $t$. In practice, this benchmark can be interpreted as a traditional forecasting framework in which expected returns are scaled proportionally to the standardized signal:
+\[
+\mu_{i,t}^{(\mathrm{const})} = \alpha z_{i,t},
+\]
+where $\alpha$ is calibrated to reflect the assumed baseline IC level.
+
+This approach provides an important point of comparison, since it represents the conventional static treatment of signal quality.
+
+\subsection{Method 1: Binning Estimator}
+
+A natural first step beyond the constant-IC assumption is to estimate predictive power nonparametrically using bins in signal space. Let
+\[
+\mathcal{B}_1,\dots,\mathcal{B}_K
+\]
+be a partition of the signal domain into intervals. For each bin $\mathcal{B}_k$, we estimate either:
+
+\begin{enumerate}[label=(\alph*)]
+    \item a local conditional mean return,
+    \[
+    \widehat{\mu}_k = \frac{1}{|\mathcal{I}_k|}\sum_{(i,t)\in \mathcal{I}_k} r_{i,t+1},
+    \]
+    where
+    \[
+    \mathcal{I}_k = \{(i,t): z_{i,t}\in \mathcal{B}_k\},
+    \]
+    or
+    \item a local conditional IC,
+    \[
+    \widehat{IC}_k = \mathrm{Corr}\big(z_{i,t}, r_{i,t+1}\mid z_{i,t}\in\mathcal{B}_k\big).
+    \]
+\end{enumerate}
+
+This produces a piecewise approximation to the conditional predictive structure. The binning approach is simple and interpretable, but it can be noisy in regions with sparse data and does not naturally enforce smoothness across neighboring bins.
+
+\subsection{Method 2: Kalman Filter State-Space Model}
+
+As a dynamic alternative, we model the conditional return structure parametrically and allow its coefficients to evolve over time.
+
+Suppose expected returns are approximated by a quadratic function of signal strength:
+\[
+\mu_t(z) = a_t + b_t z + c_t z^2.
+\]
+This allows for asymmetry and curvature in the signal--return relationship while remaining interpretable and computationally manageable.
+
+Define the latent state vector
+\[
+\theta_t =
+\begin{bmatrix}
+a_t\\ b_t\\ c_t
+\end{bmatrix}.
+\]
+We assume the state evolves as
+\[
+\theta_t = A\theta_{t-1} + w_t,
+\qquad
+w_t\sim \mathcal{N}(0,Q),
+\]
+where $A$ is often taken to be the identity matrix or a near-identity persistence matrix.
+
+For asset $i$ at time $t$, the observation equation is
+\[
+r_{i,t+1} = 
+\begin{bmatrix}
+1 & z_{i,t} & z_{i,t}^2
+\end{bmatrix}
+\theta_t + \varepsilon_{i,t},
+\qquad
+\varepsilon_{i,t}\sim \mathcal{N}(0,R).
+\]
+
+This is a linear Gaussian state-space model. The Kalman filter recursively estimates the latent coefficients $(a_t,b_t,c_t)$, thereby producing a time-varying conditional expected return function
+\[
+\widehat{\mu}_t^{(\mathrm{KF})}(z)
+=
+\widehat{a}_t + \widehat{b}_t z + \widehat{c}_t z^2.
+\]
+
+\subsubsection*{Filtering Equations}
+
+Let $\widehat{\theta}_{t|t-1}$ and $P_{t|t-1}$ denote the predicted state mean and covariance, and let $\widehat{\theta}_{t|t}$ and $P_{t|t}$ denote the updated quantities. Then:
+
+Prediction step:
+\[
+\widehat{\theta}_{t|t-1} = A\widehat{\theta}_{t-1|t-1},
+\qquad
+P_{t|t-1} = AP_{t-1|t-1}A^T + Q.
+\]
+
+Given observation vector $y_t$ and design matrix $H_t$, the update step is
+\[
+K_t = P_{t|t-1}H_t^T(H_tP_{t|t-1}H_t^T + R)^{-1},
+\]
+\[
+\widehat{\theta}_{t|t} = \widehat{\theta}_{t|t-1} + K_t\big(y_t - H_t\widehat{\theta}_{t|t-1}\big),
+\]
+\[
+P_{t|t} = (I-K_tH_t)P_{t|t-1}.
+\]
+
+This framework is attractive because it explicitly models temporal evolution, can be updated sequentially, and provides a structured alternative to purely static estimators.
+
+\section{How the Problem is Two-Dimensional}
+
+The underlying scientific question is not simply whether the signal works on average, but how its predictive strength varies jointly with:
+\begin{enumerate}[label=(\alph*)]
+    \item signal magnitude $z$, and
+    \item time $t$.
+\end{enumerate}
+
+This makes the problem intrinsically two-dimensional. In the binning formulation, we first study how predictive strength changes across regions of the signal space. In the Kalman formulation, we assume that the signal--return curve in $z$ has a low-dimensional parametric form, but that its coefficients evolve over time. Thus, the object of interest is a dynamic surface or family of curves,
+\[
+(z,t)\mapsto \mu_t(z),
+\]
+even though we model it in a structured way.
+
+The constant-IC benchmark ignores both dimensions. The binning method captures variation across $z$ but is only weakly dynamic unless it is re-estimated across rolling windows. The Kalman filter explicitly captures time variation while retaining a flexible functional dependence on $z$.
+
+\section{Visualization Placeholders}
+
+This section will contain the main diagnostic plots for the estimated conditional structure.
+
+\subsection{Scatter Plot of Returns versus Signal Strength}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{placeholder_scatter_z_r.png}
+    \caption{Scatter plot of realized returns $r_{i,t+1}$ against standardized signal values $z_{i,t}$.}
+\end{figure}
+
+\subsection{Binning-Based Conditional Estimate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{placeholder_binning_curve.png}
+    \caption{Piecewise estimate of conditional predictive strength using the binning method.}
+\end{figure}
+
+\subsection{Kalman Filter Time-Varying Curve}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{placeholder_kalman_curves.png}
+    \caption{Time-varying conditional return curves estimated via the Kalman filter state-space model.}
+\end{figure}
+
+\section{Portfolio Construction and Simulation Design}
+
+We next compare the economic value of the three predictive frameworks by using them to generate expected return forecasts for portfolio allocation.
+
+\subsection{Mean--Variance Portfolio Optimization}
+
+At each time $t$, let $\widehat{\bm{\mu}}_t$ denote the vector of expected returns for all assets and let $\Sigma_t$ denote the covariance matrix of returns. We solve the standard mean--variance problem
+\[
+\max_{\bm{w}_t}
+\left(
+\bm{w}_t^T \widehat{\bm{\mu}}_t
+-
+\frac{\lambda}{2}\bm{w}_t^T \Sigma_t \bm{w}_t
+\right),
+\]
+where $\bm{w}_t$ is the portfolio weight vector and $\lambda>0$ is the risk-aversion parameter.
+
+The expected return vector $\widehat{\bm{\mu}}_t$ depends on the estimation method:
+
+\begin{itemize}
+    \item \textbf{Constant IC:}
+    \[
+    \widehat{\mu}_{i,t}^{(\mathrm{const})} = \alpha z_{i,t}.
+    \]
+
+    \item \textbf{Binning:}
+    \[
+    \widehat{\mu}_{i,t}^{(\mathrm{bin})} = \widehat{\mu}_k
+    \quad \text{if } z_{i,t}\in \mathcal{B}_k.
+    \]
+
+    \item \textbf{Kalman filter:}
+    \[
+    \widehat{\mu}_{i,t}^{(\mathrm{KF})}
+    =
+    \widehat{a}_t + \widehat{b}_t z_{i,t} + \widehat{c}_t z_{i,t}^2.
+    \]
+\end{itemize}
+
+\subsection{Simulation Comparison}
+
+We will compare the following three strategies:
+\begin{enumerate}[label=(\roman*)]
+    \item Constant IC benchmark with $IC=0.05$,
+    \item Binning-based conditional estimator,
+    \item Kalman filter state-space estimator.
+\end{enumerate}
+
+For each strategy, the simulation will evaluate metrics such as:
+\begin{itemize}
+    \item cumulative return,
+    \item annualized volatility,
+    \item Sharpe ratio,
+    \item maximum drawdown,
+    \item turnover.
+\end{itemize}
+
+\subsection{Performance Plot Placeholder}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{placeholder_cumulative_returns.png}
+    \caption{Cumulative return comparison of the three portfolio strategies: constant IC, binning, and Kalman filter.}
+\end{figure}
+
+\subsection{Risk-Adjusted Performance Table Placeholder}
+
+\begin{table}[H]
+    \centering
+    \caption{Performance summary of simulated strategies.}
+    \begin{tabular}{lccccc}
+        \toprule
+        Method & Return & Volatility & Sharpe & Max Drawdown & Turnover \\
+        \midrule
+        Constant IC ($0.05$) &  &  &  &  &  \\
+        Binning &  &  &  &  &  \\
+        Kalman Filter &  &  &  &  &  \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{Discussion}
+
+The proposed framework allows us to compare increasingly dynamic representations of conditional predictive strength. The constant-IC model is simple but ignores heterogeneity across signal magnitudes and time. The binning approach is easy to interpret, but it may be unstable in sparse regions and discontinuous across bin boundaries. The Kalman filter, in contrast, imposes stronger structure but offers natural temporal adaptation and online interpretability.
+
+An important empirical question is whether the additional flexibility of a dynamic model translates into better out-of-sample investment performance. This question is especially relevant in finance, where statistical fit does not always imply economic value.
+
+\section{Conclusion}
+
+In this paper, we propose a framework for moving beyond the traditional constant-IC assumption by modeling predictive strength as a function of signal magnitude and time. We compare three approaches: a constant benchmark, a simple binning estimator, and a time-varying Kalman filter state-space model.
+
+This framework allows us to study whether stronger signals truly correspond to higher predictive power, and whether this information can be exploited in portfolio construction. By comparing these approaches in a common simulation setting, we aim to determine not only which method best captures dynamic conditional predictability, but also which method delivers the greatest economic value in practice.
+
+Future work may include incorporating multiple signals, extending the Kalman model to higher-order basis expansions, and studying online adaptive portfolio strategies in real-time settings.
+
+\end{document}

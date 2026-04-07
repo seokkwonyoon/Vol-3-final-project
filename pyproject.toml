@@ -1,0 +1,23 @@
+[project]
+name = "dynamic-ic"
+version = "0.1.0"
+description = "Dynamic IC estimation via walk-forward analysis"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.0",
+    "numpy>=2.4.4",
+    "polars>=1.0.0",
+    "pyarrow>=23.0.0",
+    "sf-backtester",
+    "sf-quant>=0.2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.uv.sources]
+sf-quant = { path = "../sf-quant", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

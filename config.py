@@ -1,0 +1,106 @@
+"""
+Shared configuration for the dynamic IC pipeline.
+"""
+import datetime as dt
+
+# ── Date splits ─────────────────────────────────────────────────────────────
+SPLITS = {
+    "full":   {"start": dt.date(1995, 1, 1), "end": dt.date(2025, 1, 1)},
+    "recent":  {"start": dt.date(2010, 1, 1), "end": dt.date(2025, 1, 1)},
+}
+
+# ── Strategy parameters ──────────────────────────────────────────────────────
+STATIC_IC = 0.05             # Baseline IC for the static benchmark
+GAMMA = 200                  # Risk-aversion for MVO
+LOOKBACK_DAYS = 120          # Rolling window fed to IC models (trading days)
+
+# Window parameters shared with momentum signals
+MOMENTUM_WINDOW = 231        # 11-to-1 month lookback
+MOMENTUM_SKIP = 21           # Skip most recent month
+REVERSAL_WINDOW = 21         # Short-term reversal window
+
+# Minimum price filter for universe
+MIN_PRICE = 5.0
+
+# ── Barra factor groupings ───────────────────────────────────────────────────
+STYLE_FACTORS = [
+    "BETA", "DIVYILD", "EARNQLTY", "EARNYILD", "GROWTH", "LEVERAGE",
+    "LIQUIDTY", "LTREVRSL", "MGMTQLTY", "MIDCAP", "MOMENTUM", "PROFIT",
+    "PROSPECT", "RESVOL", "SIZE", "VALUE",
+]
+
+INDUSTRY_FACTORS = [
+    "AERODEF", "AIRLINES", "ALUMSTEL", "APPAREL", "AUTO", "BANKS",
+    "BEVTOB", "BIOLIFE", "BLDGPROD", "CHEM", "CNSTENG", "CNSTMACH",
+    "CNSTMATL", "COMMEQP", "COMPELEC", "COMSVCS", "CONGLOM", "CONTAINR",
+    "DISTRIB", "DIVFIN", "ELECEQP", "ELECUTIL", "FOODPROD", "FOODRET",
+    "GASUTIL", "HLTHEQP", "HLTHSVCS", "HOMEBLDG", "HOUSEDUR", "INDMACH",
+    "INSURNCE", "INTERNET", "LEISPROD", "LEISSVCS", "LIFEINS", "MEDIA",
+    "MGDHLTH", "MULTUTIL", "OILGSCON", "OILGSDRL", "OILGSEQP", "OILGSEXP",
+    "PAPER", "PHARMA", "PRECMTLS", "PSNLPROD", "REALEST", "RESTAUR",
+    "ROADRAIL", "SEMICOND", "SEMIEQP", "SOFTWARE", "SPLTYRET", "SPTYCHEM",
+    "SPTYSTOR", "TELECOM", "TRADECO", "TRANSPRT", "WIRELESS",
+]
+
+# ── Available signals ────────────────────────────────────────────────────────
+SIGNALS = [
+    "style_momentum",
+    "industry_momentum",
+    "idiosyncratic_momentum",
+    "style_reversal",
+    "industry_reversal",
+    "idiosyncratic_reversal",
+    "idiosyncratic_volatility",
+    "betting_against_beta",
+]
+
+# ── Available IC models ──────────────────────────────────────────────────────
+MODELS = [
+    "static",
+    "kalman_poly",
+    "rbf_rls",
+    "binned_kalman",
+    "nadaraya_watson",
+]
+
+# ── Backtest constraints ─────────────────────────────────────────────────────
+CONSTRAINTS = ["ZeroBeta", "ZeroInvestment"]
+
+# ── Slurm walltime limits (HH:MM:SS) ─────────────────────────────────────────
+# Phase 1: z-score computation (one task per signal)
+SLURM_TIME_COMPUTE = "00:30:00"
+# Phase 2: walk-forward IC estimation + inline MVO (one task per signal×model)
+SLURM_TIME_TRAIN   = "03:00:00"
+# Phase 3: analysis and chart generation
+SLURM_TIME_ANALYZE = "00:30:00"
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+PROJECT_ROOT = "/home/connerd4/silverfund/dynamic_ic"
+FACTORS_PATH = "/home/connerd4/groups/grp_quant/database/research/factors/factors_*.parquet"
+EXPOSURES_PATH = "/home/connerd4/groups/grp_quant/database/research/exposures/exposures_*.parquet"
+BYU_EMAIL = "connerd4@byu.edu"
+
+
+# ── Path helpers ─────────────────────────────────────────────────────────────
+def split_dir(split: str) -> str:
+    return f"{PROJECT_ROOT}/results/{split}"
+
+
+def z_scores_path(split: str, signal: str) -> str:
+    """Cached z-score parquet for a signal."""
+    return f"{split_dir(split)}/z_scores/{signal}.parquet"
+
+
+def alphas_path(split: str, signal: str, model: str) -> str:
+    """Alpha parquet produced by walk-forward for (signal, model) pair."""
+    return f"{split_dir(split)}/alphas/{signal}/{model}.parquet"
+
+
+def weights_dir(split: str, signal: str, model: str) -> str:
+    """Weights directory consumed by sf_backtester."""
+    return f"{split_dir(split)}/weights/{signal}/{model}/{GAMMA}"
+
+
+def signal_name(signal: str, model: str) -> str:
+    """Human-readable name used as the sf_backtester signal_name."""
+    return f"dynamic_ic_{signal}_{model}"
