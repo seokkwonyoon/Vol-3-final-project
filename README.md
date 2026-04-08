@@ -21,84 +21,99 @@ This project learns that shape online.
 
 ## Pipeline
 
-```
-compute.py  →  train.py  →  analyze.py
-```
-
-| Step | Script | Output |
-|------|--------|--------|
-| 1 | `compute.py` | `results/{split}/z_scores/{signal}.parquet` |
-| 2 | `train.py` | `results/{split}/alphas/{signal}/{model}.parquet` + MVO weights |
-| 3 | `analyze.py` | Summary table, performance charts, IC function evolution plots |
-
-### Fire-and-forget on the cluster
-
-`run.py` submits all three phases to Slurm in one command and then exits.
-You receive a failure email if any step fails, and a completion email when
-analysis finishes.
+The pipeline runs in four sequential phases, each depending on the previous:
 
 ```
-Phase 1: job array (0-7)   — compute.py  per signal          4 CPU / 32G / 30 min
-Phase 2: job array (0-39)  — train.py    per signal×model   16 CPU / 64G /  3 hr
-Phase 3: single job        — analyze.py  for the split       4 CPU / 32G / 30 min
+Phase 1: compute.py   z-score each signal cross-sectionally, cache to parquet
+Phase 2: train.py     walk-forward IC estimation → alpha parquets (one per pair)
+Phase 3: mvo.py       mean-variance optimization → portfolio weights (one per pair)
+Phase 4: analyze.py   performance charts, IC function evolution, summary report
 ```
 
-Each phase starts only after **all tasks** of the previous phase succeed.
+**Phase 2 is the core.** For each (signal, model) pair it steps through every
+trading day sequentially: update the IC model with yesterday's realised returns,
+then predict today's alphas. This is inherently sequential because each model
+carries state that depends on all prior days.
+
+**Phase 3 is independent across dates.** Given the alpha parquets from Phase 2,
+MVO for each trading day is solved independently — no state, no look-ahead — so
+Ray fans it out across 16 CPUs simultaneously.
+
+### Submitting to the cluster
+
+`submit.py` submits all four phases as a Slurm job chain and exits. Each phase
+starts only after every task of the previous phase succeeds.
+
+```
+Phase 1  8-task array    compute.py   per signal           4 CPU / 32G / 30 min
+Phase 2  40-task array   train.py     per signal×model     4 CPU / 32G / 12 hr
+Phase 3  40-task array   mvo.py       per signal×model    16 CPU / 64G /  2 hr
+Phase 4  single job      analyze.py   for the split        4 CPU / 32G / 15 min
+```
+
+```bash
+uv run python submit.py --split recent           # submit everything
+uv run python submit.py --split recent --dry-run # print scripts without submitting
+```
+
+### Running steps manually
+
+```bash
+uv run python compute.py --split recent --signal style_momentum
+uv run python train.py   --split recent --signal style_momentum --model kalman_poly
+uv run python mvo.py     --split recent --signal style_momentum --model kalman_poly
+uv run python analyze.py --split recent
+```
 
 ## Signals
 
-Eight signals are pre-computed and cached as cross-sectional z-scores:
+Eight signals, each pre-computed as a cross-sectional z-score across the universe:
 
 | Signal | Source | Description |
 |--------|--------|-------------|
-| `style_momentum` | Barra style factor returns | 11-to-1 month vol-scaled momentum mapped via exposures |
-| `industry_momentum` | Barra industry factor returns | Same methodology, industry factors |
-| `idiosyncratic_momentum` | `specific_return` (assets) | Vol-scaled rolling momentum on idio returns |
-| `style_reversal` | Barra style factor returns | 21-day reversal (negated momentum) |
+| `style_momentum` | Barra style factor returns | 11-to-1 month vol-scaled momentum |
+| `industry_momentum` | Barra industry factor returns | Same, industry factors |
+| `idiosyncratic_momentum` | `specific_return` | Vol-scaled rolling momentum on idio returns |
+| `style_reversal` | Barra style factor returns | 21-day reversal |
 | `industry_reversal` | Barra industry factor returns | Same, industry factors |
 | `idiosyncratic_reversal` | `specific_return` | 21-day idio reversal |
 | `idiosyncratic_volatility` | `specific_risk` | Low-vol anomaly: negative specific risk |
 | `betting_against_beta` | `predicted_beta` | BAB: negative predicted beta |
 
-All signals output `(date, barrid, raw_signal)`. The pipeline z-scores them
-cross-sectionally across all stocks on each date.
-
 ## IC Models
 
-Four dynamic models plus a static baseline, all in `models/`:
+Five models in `models/`, all sharing the same interface:
 
-| Model | Key | Complexity |
-|-------|-----|------------|
-| `static` | Fixed IC = 0.05 for all z | Baseline |
-| `kalman_poly` | State-space polynomial — state is `[β0, β1, β2]`, `IC(z) = β0 + β1·z + β2·z²`, Kalman-updated each day | Medium |
-| `rbf_rls` | 7 Gaussian basis functions + Recursive Least Squares with forgetting factor | Medium |
-| `binned_kalman` | 15 independent 1-D Kalman filters, one per z-score bin | Low |
-| `nadaraya_watson` | Rolling buffer + spatial × temporal kernel regression | Low |
-
-All models share the `ICModel` interface from `models/base.py`:
 ```python
-model.update(z, y)              # y = r / σ (risk-normalised return)
-alpha_z, variance = model.predict(z)   # alpha_z = IC(z) × z
+model.update(z, y)               # y = r / σ  (risk-normalised return)
+alpha_z, variance = model.predict(z)  # alpha_z = IC(z) × z
 ```
 
-The final Grinold alpha is `alpha_i = σ_i × alpha_z_i`.
+| Model | Description |
+|-------|-------------|
+| `static` | Fixed IC = 0.05 — the baseline |
+| `kalman_poly` | Kalman filter over polynomial coefficients: `IC(z) = β0 + β1·z + β2·z²` |
+| `rbf_rls` | 7 Gaussian basis functions fit by recursive least squares with forgetting |
+| `binned_kalman` | 15 independent Kalman filters, one per z-score bin |
+| `nadaraya_watson` | Rolling kernel regression: spatial × temporal weights over a 120-day buffer |
 
 ### Adding a new model
 
-1. Create `models/my_model.py` implementing `ICModel`.
+1. Create `models/my_model.py` implementing `ICModel` from `models/base.py`.
 2. Register it in `models/__init__.py`.
-3. Add its name to `MODELS` in `config.py`.
+3. Add its key to `MODELS` in `config.py`.
 
 ## Project Structure
 
 ```
 dynamic_ic/
-├── run.py                  # Slurm orchestrator: submit all 3 phases at once
-├── compute.py              # Phase 1: cache z-score parquets
-├── train.py                # Phase 2: walk-forward → alphas → MVO weights
-├── analyze.py              # Phase 3: charts, summary, IC visualisation
-├── config.py               # All dates, params, signal names, paths
-├── pipeline.py             # DynamicICPipeline: z-scores, walk-forward
+├── submit.py               # Slurm orchestrator — submit all 4 phases at once
+├── compute.py              # Phase 1: compute and cache z-score parquets
+├── train.py                # Phase 2: walk-forward IC estimation → alpha parquets
+├── mvo.py                  # Phase 3: mean-variance optimization → weight parquets
+├── analyze.py              # Phase 4: charts, summary table, IC visualisation
+├── pipeline.py             # DynamicICPipeline: z-scores + walk-forward logic
+├── config.py               # All parameters, splits, signal names, paths
 ├── models/
 │   ├── base.py             # ICModel ABC
 │   ├── static.py
@@ -107,62 +122,17 @@ dynamic_ic/
 │   ├── binned_kalman.py
 │   └── nadaraya_watson.py
 ├── signals/
-│   ├── _factor_signal.py   # shared helper: factor returns → asset z
+│   ├── _factor_signal.py   # shared helper: factor returns → asset z-score
 │   ├── _asset_signal.py    # shared helper: asset parquet loaders
-│   ├── style_momentum.py
-│   ├── industry_momentum.py
-│   ├── idiosyncratic_momentum.py
-│   ├── style_reversal.py
-│   ├── industry_reversal.py
-│   ├── idiosyncratic_reversal.py
-│   ├── idiosyncratic_volatility.py
-│   └── betting_against_beta.py
-├── tests/
-│   ├── test_models.py      # unit tests for all IC models
-│   ├── test_pipeline.py    # unit tests for DynamicICPipeline
-│   └── test_config.py      # sanity checks for config values
+│   └── {signal_name}.py    # one file per signal
 └── results/
     └── {split}/
-        ├── z_scores/
+        ├── z_scores/{signal}.parquet
         ├── alphas/{signal}/{model}.parquet
-        ├── weights/{signal}/{model}/{gamma}/
+        ├── weights/{signal}/{model}/{gamma}/{year}.parquet
         ├── performance_{signal}.png
         ├── ic_function_{signal}.png
         └── backtest_report.txt
-```
-
-## Usage
-
-```bash
-# Install dependencies (including dev extras for testing)
-uv sync --extra dev
-
-# ── Automated (fire-and-forget on the cluster) ──────────────────────────────
-uv run python run.py --split full          # submit full pipeline, then walk away
-uv run python run.py --split full --dry-run  # print scripts without submitting
-
-# ── Manual (step-by-step, locally or interactively) ────────────────────────
-# Phase 1: pre-compute z-scores (run once per split)
-uv run python compute.py --split full
-uv run python compute.py --split recent --signal style_momentum   # single signal
-
-# Phase 2a: walk-forward only (no MVO)
-uv run python train.py --split full --no-backtest
-
-# Phase 2b: walk-forward + submit MVO to Slurm (BacktestRunner, one job per year)
-uv run python train.py --split full
-
-# Phase 2c: walk-forward + run MVO inline (no nested Slurm; used internally by run.py)
-uv run python train.py --split full --run-mvo
-
-# Single pair
-uv run python train.py --split recent --signal style_momentum --model kalman_poly
-
-# Phase 3: generate charts and summary
-uv run python analyze.py --split full
-
-# ── Tests ───────────────────────────────────────────────────────────────────
-uv run pytest
 ```
 
 ## Configuration
@@ -173,8 +143,15 @@ All tuneable parameters live in `config.py`:
 |-----------|---------|-------------|
 | `STATIC_IC` | 0.05 | Fixed IC for the static baseline |
 | `GAMMA` | 200 | MVO risk-aversion parameter |
-| `LOOKBACK_DAYS` | 120 | Rolling window fed to IC models |
-| `MOMENTUM_WINDOW` | 231 | 11-month rolling window for momentum signals |
-| `MOMENTUM_SKIP` | 21 | Skip most-recent month (standard momentum convention) |
+| `LOOKBACK_DAYS` | 120 | Rolling window fed to IC models (trading days) |
+| `MOMENTUM_WINDOW` | 231 | 11-month lookback for momentum signals |
+| `MOMENTUM_SKIP` | 21 | Skip most-recent month (standard convention) |
 | `REVERSAL_WINDOW` | 21 | Short-term reversal window |
 | `MIN_PRICE` | 5.0 | Minimum stock price filter |
+
+## Tests
+
+```bash
+uv sync --extra dev
+uv run pytest
+```

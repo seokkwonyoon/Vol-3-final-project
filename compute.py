@@ -11,9 +11,11 @@ Usage:
 """
 import argparse
 import os
+import time
 
 from config import SPLITS, SIGNALS, z_scores_path
 from pipeline import DynamicICPipeline
+from timing import record_elapsed
 
 
 def main():
@@ -38,6 +40,7 @@ def main():
             continue
 
         print(f"Signal: {sig}")
+        t0 = time.perf_counter()
         try:
             zdf = pipe.compute_zscores(sig, split["start"], split["end"])
         except Exception as e:
@@ -46,7 +49,9 @@ def main():
 
         os.makedirs(os.path.dirname(out), exist_ok=True)
         zdf.write_parquet(out)
-        print(f"  ✓ {zdf.height:,} rows → {out}\n")
+        elapsed = time.perf_counter() - t0
+        record_elapsed("compute", f"{sig}/{args.split}", elapsed)
+        print(f"  ✓ {zdf.height:,} rows → {out}  ({elapsed:.0f}s)\n")
 
     print("Done.")
 

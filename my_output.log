@@ -1,0 +1,9 @@
+nohup: ignoring input
+Split:   recent
+Signals: 8   Models: 5   Pairs: 40
+Phase 1 submitted: job 11304923  (8-task array)
+Phase 2 submitted: job 11304924  (40-task array)  [afterok:11304923]
+Phase 3 submitted: job 11304925  (single job)            [afterok:11304924]
+
+Pipeline queued.  Email → connerd4@byu.edu on failure or completion.
+Monitor with:  squeue -u $USER

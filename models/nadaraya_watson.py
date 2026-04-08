@@ -1,18 +1,21 @@
 """
-Online Nadaraya-Watson Kernel Regression.
+Online Nadaraya-Watson Kernel Regression (incremental grid-based).
 
-Maintains a rolling buffer of (z, y) observations from the last
-`max_days` trading days. For a new z_query:
+Maintains running weighted sums on a fixed z-score grid instead of a
+raw observation buffer.  For a new z_query:
 
-  f̂(z) = Σ_i  w_i · y_i  /  Σ_i  w_i
+  f̂(z_query) = interp(z_grid,  Σ_i w_i·y_i / Σ_i w_i,  z_query)
 
-where
-  w_i = K_spatial(z_query - z_i) · K_temporal(t_query - t_i)
-  K_spatial(Δz) = exp(-Δz² / (2·h_s²))
-  K_temporal(Δt) = exp(-Δt / τ)            (Δt in trading days)
+where weights decay exponentially over time:
+
+  w_i(t) = K_spatial(z_grid - z_i) · exp(-age_i / τ)
+
+Each call to update() ages the existing sums by one day and accumulates
+today's contribution in O(n_grid × n_obs) — roughly 200×700 ≈ 140 k ops.
+Each call to predict() is O(n_query) (numpy interp).  This replaces the
+original O(n_query × max_days × n_obs) ≈ 58 M ops per day formulation.
 """
 import numpy as np
-from collections import deque
 from models.base import ICModel
 
 
@@ -21,81 +24,74 @@ class NadarayaWatsonIC(ICModel):
     Parameters
     ----------
     bandwidth_z : float
-        Spatial bandwidth h_s.
+        Spatial bandwidth h_s for the Gaussian kernel.
     decay_days : float
-        Temporal decay τ (half-life in trading days).
-    max_days : int
-        Maximum number of days to keep in the buffer.
+        Temporal decay τ; a observation aged d days is down-weighted
+        by exp(-d / τ).  Effectively replaces the hard max_days cutoff
+        with a soft exponential one (data older than ~5τ has < 1 % weight).
+    n_grid : int
+        Number of evaluation points on the fixed z-grid [-3, 3].
     min_weight_sum : float
-        Minimum Σw required to make a prediction (otherwise fall back to 0).
+        Minimum Σw at a grid point required to make a prediction;
+        below this the point falls back to IC = 0, variance = 1.
     """
 
     def __init__(
         self,
         bandwidth_z: float = 0.5,
         decay_days: float = 60.0,
-        max_days: int = 120,
+        n_grid: int = 200,
         min_weight_sum: float = 1e-8,
     ) -> None:
-        self.h_s = bandwidth_z
-        self.tau = decay_days
-        self.max_days = max_days
-        self.min_w = min_weight_sum
+        self.h_s    = bandwidth_z
+        self.tau    = decay_days
+        self.min_w  = min_weight_sum
 
-        # Buffer: each element is (z_array, y_array, age_in_days)
-        # age=0 → today, age=1 → yesterday, ...
-        self._buf: deque[tuple[np.ndarray, np.ndarray]] = deque()
-        self._day = 0   # current day counter
+        # Fixed evaluation grid
+        self.z_grid = np.linspace(-3.0, 3.0, n_grid)
+
+        # Running weighted sums on the grid
+        self.sum_w   = np.zeros(n_grid)   # Σ k_s · k_t
+        self.sum_wy  = np.zeros(n_grid)   # Σ k_s · k_t · y
+        self.sum_wy2 = np.zeros(n_grid)   # Σ k_s · k_t · y²  (for variance)
+
+        # Multiplicative per-day decay: k_t(age=1) = exp(-1 / τ)
+        self._decay = np.exp(-1.0 / decay_days)
 
     def update(self, z: np.ndarray, y: np.ndarray) -> None:
         if len(z) == 0:
             return
-        self._buf.appendleft((z.copy(), y.copy(), self._day))
-        self._day += 1
-        # Evict observations older than max_days
-        while self._buf and (self._day - self._buf[-1][2]) > self.max_days:
-            self._buf.pop()
+
+        # Age all existing contributions by one trading day
+        self.sum_w   *= self._decay
+        self.sum_wy  *= self._decay
+        self.sum_wy2 *= self._decay
+
+        # Accumulate today's observations: spatial kernel (n_grid, n_obs)
+        dz  = self.z_grid[:, None] - z[None, :]          # (n_grid, n_obs)
+        k_s = np.exp(-0.5 * (dz / self.h_s) ** 2)        # (n_grid, n_obs)
+
+        self.sum_w   += k_s.sum(axis=1)
+        self.sum_wy  += (k_s * y[None, :]).sum(axis=1)
+        self.sum_wy2 += (k_s * (y[None, :] ** 2)).sum(axis=1)
 
     def predict(self, z_query: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        if not self._buf:
-            return np.zeros_like(z_query), np.ones_like(z_query)
+        valid = self.sum_w > self.min_w
 
-        # Concatenate buffer into arrays
-        all_z = np.concatenate([b[0] for b in self._buf])
-        all_y = np.concatenate([b[1] for b in self._buf])
-        # Age in days: day of b relative to current day
-        ages = np.concatenate([
-            np.full(len(b[0]), self._day - b[2] - 1, dtype=float)
-            for b in self._buf
-        ])
+        # IC(z) on the grid: E[y | z]
+        ic_grid = np.where(valid, self.sum_wy / self.sum_w, 0.0)
 
-        n_query = len(z_query)
-        alpha_z = np.empty(n_query)
-        variance_z = np.empty(n_query)
+        # Variance on the grid: E[y²] - E[y]²
+        ey2_grid  = np.where(valid, self.sum_wy2 / self.sum_w, 1.0)
+        var_grid  = np.maximum(ey2_grid - ic_grid ** 2, 0.0)
+        var_grid  = np.where(valid, var_grid, 1.0)
 
-        # Batch computation over query points
-        # spatial kernel: (n_query, n_buffer)
-        dz = z_query[:, None] - all_z[None, :]      # (nq, nb)
-        k_s = np.exp(-0.5 * (dz / self.h_s) ** 2)
+        # Interpolate to the actual query z-scores
+        alpha_z    = np.interp(z_query, self.z_grid, ic_grid)
+        variance_z = np.interp(z_query, self.z_grid, var_grid)
 
-        # temporal kernel: (n_buffer,) broadcast to (nq, nb)
-        k_t = np.exp(-ages / self.tau)               # (nb,)
-
-        w = k_s * k_t                                # (nq, nb)
-        w_sum = w.sum(axis=1)                        # (nq,)
-
-        valid = w_sum > self.min_w
-        alpha_z[valid] = (w[valid] * all_y[None, :]).sum(axis=1)[valid] / w_sum[valid]
-        alpha_z[~valid] = 0.0
-
-        # Variance: weighted variance of y values
-        if valid.any():
-            alpha_z_v = alpha_z[valid]
-            w_v = w[valid]
-            w_sum_v = w_sum[valid]
-            y_bar = alpha_z_v                        # (nv,)
-            sq_dev = (all_y[None, :] - y_bar[:, None]) ** 2  # (nv, nb)
-            variance_z[valid] = (w_v * sq_dev).sum(axis=1) / w_sum_v
-        variance_z[~valid] = 1.0
+        # Fall back for queries where the grid has no data
+        no_data = np.interp(z_query, self.z_grid, valid.astype(float)) < 0.5
+        variance_z[no_data] = 1.0
 
         return alpha_z, variance_z

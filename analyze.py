@@ -14,6 +14,7 @@ Usage:
 import argparse
 import os
 import sys
+import time
 
 import numpy as np
 import polars as pl
@@ -24,6 +25,7 @@ from config import (
     z_scores_path, alphas_path,
 )
 from models import MODEL_REGISTRY
+from timing import record_elapsed
 
 
 # ── Matplotlib style ──────────────────────────────────────────────────────────
@@ -173,6 +175,7 @@ def visualise_ic_function(
 
 
 def main():
+    t0 = time.perf_counter()
     parser = argparse.ArgumentParser(description="Analyse and visualise backtest results")
     parser.add_argument("--split", required=True, choices=list(SPLITS.keys()))
     parser.add_argument("--signal", default=None,
@@ -289,9 +292,12 @@ def main():
     for sig in signals:
         visualise_ic_function(args.split, sig, dynamic_models, out_dir)
 
+    elapsed = time.perf_counter() - t0
+    record_elapsed("analyze", args.split, elapsed)
+
     sys.stdout.close()
     sys.stdout = sys.__stdout__
-    print(f"\nReport saved to {log_path}")
+    print(f"\nReport saved to {log_path}  ({elapsed:.0f}s)")
 
 
 if __name__ == "__main__":

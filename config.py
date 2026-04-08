@@ -66,13 +66,27 @@ MODELS = [
 # ── Backtest constraints ─────────────────────────────────────────────────────
 CONSTRAINTS = ["ZeroBeta", "ZeroInvestment"]
 
-# ── Slurm walltime limits (HH:MM:SS) ─────────────────────────────────────────
+# ── Slurm resource specs ──────────────────────────────────────────────────────
 # Phase 1: z-score computation (one task per signal)
 SLURM_TIME_COMPUTE = "00:30:00"
-# Phase 2: walk-forward IC estimation + inline MVO (one task per signal×model)
-SLURM_TIME_TRAIN   = "03:00:00"
-# Phase 3: analysis and chart generation
-SLURM_TIME_ANALYZE = "00:30:00"
+SLURM_CPUS_COMPUTE = 4
+SLURM_MEM_COMPUTE  = "32G"
+
+# Phase 2: walk-forward only (one task per signal×model)
+# nadaraya_watson is the bottleneck — give it plenty of headroom
+SLURM_TIME_TRAIN   = "12:00:00"
+SLURM_CPUS_TRAIN   = 4     # sequential loop; extra CPUs don't help
+SLURM_MEM_TRAIN    = "32G"
+
+# Phase 3: MVO via Ray (one task per signal×model)
+SLURM_TIME_MVO     = "03:00:00"   # 15 yr × 5 min/yr = 75 min + buffer
+SLURM_CPUS_MVO     = 16           # Ray fans out across all CPUs
+SLURM_MEM_MVO      = "64G"
+
+# Phase 4: analysis and chart generation
+SLURM_TIME_ANALYZE = "00:15:00"
+SLURM_CPUS_ANALYZE = 4
+SLURM_MEM_ANALYZE  = "32G"
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = "/home/connerd4/silverfund/dynamic_ic"

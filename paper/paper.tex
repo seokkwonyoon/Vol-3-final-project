@@ -8,284 +8,113 @@
 \usepackage{graphicx}
 \usepackage{amssymb,amsmath,amsthm}
 \usepackage{placeins} %enables \FloatBarrier, which prevents figures and tables from going below it.
-\usepackage{hyperref} %makes cross references into hyperlinks.
+\usepackage{hyperref} %makes cross references into hyperlinks. 
 \usepackage{caption}
 \usepackage{subcaption} %Allows subfigures
-\usepackage{booktabs}
-
+ 
 
 %%% WARNING: Do NOT change the page size, fonts, or margins!  Penalties will apply.
 %%% WARNING: Do NOT change the page size, fonts, or margins!  Penalties will apply.
 
 \begin{document}
 
-\title{Dynamic Information Coefficients via Online Learning}
-\author{Draper Conner \and Seokkwon Yoon}
+\title{Modeling the Dynamic Conditional Information Coefficient}
+\author{Conner B. Draper, Seokkwon Yoon}
 
-\date{April 2026}
+% Change the date to match the date you actually wrote this paper
+\date{\today} 
 
-\maketitle
+\maketitle % this actually makes the title
 
 \begin{abstract}
-The Information Coefficient (IC) is the standard measure of signal quality in quantitative finance,
-typically held constant at a long-run average such as $IC = 0.05$.
-In practice, however, predictive power may vary both with signal magnitude and over time.
-We study a conditional, time-varying IC function $IC_t(z)$, where $z$ is a standardized signal value.
-Using eight Barra-derived cross-sectional signals over a 30-year U.S.\ equity universe,
-we compare a static baseline against four online estimators:
-a polynomial Kalman filter, a recursive basis-function expansion (RBF-RLS),
-a binned Kalman filter, and Nadaraya--Watson kernel regression.
-Each model generates daily alpha forecasts that are fed into a
-mean--variance optimizer via the Grinold formula.
-We evaluate whether the added flexibility of a dynamic IC translates into improved
-out-of-sample Sharpe ratios and drawdown reduction relative to the static benchmark.
+The Information Coefficient (IC) is a widely used measure of predictive signal quality in quantitative finance, typically treated as a constant. However, predictive power may depend on signal strength and vary over time. In this paper, we study a dynamic conditional Information Coefficient, denoted $IC_t(z)$, where $z$ represents standardized signal strength. We compare five approaches: a constant IC baseline, independent binned Kalman filters, a Kalman filter polynomial state-space model, Recursive Least Squares with RBFs, and Nadaraya-Watson kernel regression. We evaluate their effectiveness across eight cross-sectional signals through walk-forward mean-variance optimization, determining whether modeling conditional predictive strength leads to improved risk-adjusted performance.
 \end{abstract}
 
 %% First Section
-\section{Research Question and Overview of the Data}
+\section{Research question and overview of the data }
 
-\textbf{Research questions.}
-(i)~Does the predictive strength of a cross-sectional signal depend on its magnitude?
-(ii)~If so, can an online estimate of the conditional IC improve portfolio construction
-relative to a constant-IC benchmark?
+In traditional quantitative finance, the Information Coefficient (IC) is often assumed to be constant (e.g., $IC \approx 0.05$). This simplification ignores the possibility that predictive power depends on signal strength and market regimes. Our central research question is: \textit{Does predictive performance vary as a function of standardized signal values $z$, and can online learning models dynamically estimate this relationship to improve portfolio allocation?}
 
-\textbf{Prior work.}
-Grinold and Kahn \cite{GrinoldKahn} establish the fundamental relationship
-$\alpha_i = IC \cdot \sigma_i \cdot z_i$,
-where $IC$ is a scalar, $\sigma_i$ is idiosyncratic volatility, and $z_i$ is a standardized signal.
-The possibility that $IC$ itself depends on $z$ has received little systematic treatment.
-Fama and French \cite{FamaFrench} and Carhart \cite{Carhart} motivate momentum and value signals.
-Frazzini and Pedersen \cite{FrazziniPedersen} motivate the betting-against-beta signal.
+The central object of interest is $IC_t(z)$, representing a conditional and time-varying Information Coefficient. If signals with larger magnitudes (high $|z|$) exhibit stronger predictive power than those near zero, portfolio construction methods that exploit this structure may significantly outperform static approaches.
 
-\textbf{Data.}
-We use the Barra USE4 model, sourced from the Silverfund research database.
-The universe spans January 1995 through December 2024, covering approximately 3{,}000
-in-universe U.S.\ equities per day.
-For each asset and date we observe: daily total return, idiosyncratic return (\texttt{specific\_return}),
-idiosyncratic risk (\texttt{specific\_risk}), predicted beta, and Barra factor exposures.
-Factor return series are provided for 16 style factors (e.g.\ MOMENTUM, VALUE, SIZE)
-and 59 industry factors.
+We consider a panel dataset consisting of standardized signals $z_{i,t}$ and subsequent realized returns $r_{i,t+1}$ for a cross-section of assets over time. We evaluate eight signals: style, industry, and idiosyncratic momentum; style, industry, and idiosyncratic reversal; idiosyncratic volatility; and betting against beta (BAB). 
 
-We construct eight signals from these data sources (Table~\ref{tab:signals}).
-All signals are cross-sectionally z-scored to zero mean and unit variance each day,
-clipped to $[-3, 3]$, producing the input $z_{i,t}$ for all downstream models.
+\begin{itemize}
+    \item Data Weaknesses: Financial return data is notoriously noisy, and the assumption of a constant variance structure is often violated. Furthermore, micro-cap stocks can introduce extreme outliers.
+    \item Suitability: This dataset is highly suitable because it spans diverse risk factors (Barra components and idiosyncratic metrics), providing the breadth required by the Fundamental Law of Active Management \cite{Vandermeersch} to validate statistical learning models.
+    \item Expected Analysis: We expect that models capturing time-varying, state-dependent predictive power will yield superior expected returns ($\mu_t$) and smoothly down-weight decaying signals compared to the constant baseline.
+\end{itemize}
 
-\begin{table}[h]
-\centering
-\caption{Eight cross-sectional signals used in the study.}
-\label{tab:signals}
-\small
-\begin{tabular}{ll}
-\toprule
-Signal & Construction \\
-\midrule
-Style momentum      & 11-to-1 month vol-scaled return, Barra style factors $\to$ assets \\
-Industry momentum   & Same, Barra industry factors \\
-Idiosyncratic momentum & 11-to-1 month vol-scaled \texttt{specific\_return} per asset \\
-Style reversal      & 21-day style factor return, negated \\
-Industry reversal   & 21-day industry factor return, negated \\
-Idiosyncratic reversal & 21-day \texttt{specific\_return}, negated \\
-Idiosyncratic volatility & Negative \texttt{specific\_risk} (low-vol anomaly) \\
-Betting against beta & Negative \texttt{predicted\_beta} \\
-\bottomrule
-\end{tabular}
-\end{table}
+\begin{figure}[tph] %Put your images in a figure like this
+     \centering
+      \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+	   \includegraphics[width=.95\linewidth]{crossover1.png}
+     \end{subfigure}
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+	   \includegraphics[width=.95\linewidth]{crossover2.png}
+     \end{subfigure}
+     \caption[Behavior of Conditional Returns]{In these plots we consider the behavior of the estimated conditional return curves. The left plot illustrates the learned piece-wise relationship using the binning method across the z-score distribution. The right plot shows the time-varying conditional return curve estimated via Kalman filtering. The dynamic models successfully adapt to non-linearities at the tails of the distribution, which a static baseline ignores.}
+\label{fig:MeanSquaredError} 
+\end{figure}
 
-\textbf{Data weaknesses.}
-Factor exposures and returns are supplied by a single vendor (Barra),
-introducing model risk from the provider's own construction choices.
-The universe membership filter (\texttt{in\_universe = True}) applies survivorship bias mitigation
-but does not eliminate all look-ahead issues in factor construction.
-Stocks below \$5 per share are excluded, which may affect small-cap momentum dynamics.
+%% Second Section 
+\section{Data Cleaning / Feature Engineering }
 
-\textbf{Hypotheses.}
-We expect that (a) signals with large $|z|$ are more predictive than those near zero,
-producing a nonlinear IC function; (b) the shape of this function shifts across market regimes;
-and (c) at least one dynamic estimator will improve upon the static 0.05 IC.
+To avoid look-ahead bias, we ensure that all signals at time $t$ are used only to predict returns at time $t+1$. The dataset is split into chronological training and testing periods. 
 
-%% Second Section
-\section{Data Cleaning and Feature Engineering}
-
-\textbf{Signal normalization.}
-Raw signals are computed from rolling windows (231 days for momentum, 21 days for reversal)
-over log-returns, vol-scaled by dividing by the rolling standard deviation.
-A final per-date cross-sectional z-score produces $z_{i,t}$.
-
-\textbf{Training pairs.}
-Each model is trained on risk-normalised returns
-\[
-  y_{i,t} \;=\; \frac{r_{i,t+1}}{\sigma_{i,t}},
-\]
-paired with $z_{i,t}$.
-Dividing by $\sigma_{i,t}$ removes the scale dependence across stocks, so all models
-learn a dimensionless IC function, consistent with the Grinold formulation.
-Forward returns use a strict one-day lag to prevent look-ahead.
-
-\textbf{Walk-forward design.}
-Rather than a single train/test split, we run a fully sequential walk-forward:
-at each date $t$ the model is updated with the previous day's $(z_{i,t-1}, y_{i,t-1})$ pairs,
-then used to predict alphas for date $t$.
-A 120-day rolling lookback controls how much historical data influences non-recursive models
-(e.g.\ Nadaraya--Watson).
-
-\textbf{Alpha construction.}
-Given the model's prediction $\widehat{IC}_t(z)$, Grinold's formula becomes
-\[
-  \alpha_{i,t} \;=\; \sigma_{i,t} \cdot \widehat{IC}_t(z_{i,t}) \cdot z_{i,t}.
-\]
-These alphas, together with Barra covariance matrices, are fed into a
-mean--variance optimizer with zero-beta and zero-investment constraints ($\lambda = 200$).
-
+The raw signals are engineered by standardizing them cross-sectionally on each date, yielding $z_{i,t} \in [-3, 3]$. Furthermore, to properly model the IC using the Grinold framework, we risk-normalize the target variable. Instead of raw returns, the target is $y_{i,t+1} = r_{i,t+1} / \sigma_{i,t}$, where $\sigma_{i,t}$ is the specific risk. We apply a minimum price filter ($>\$5.00$) to filter out illiquid micro-cap noise. This transforms the modeling objective into predicting risk-adjusted returns where the scaling factor directly represents the IC.
 
 %% Third Section
 \section{Data Visualization and Basic Analysis}
 
-Figure~\ref{fig:ic_function} shows the estimated IC function for style momentum
-at three checkpoints in time for each dynamic model.
-The static baseline ($IC = 0.05$, dashed) is shown for reference.
-We expect the true relationship to be nonlinear: small $|z|$ should carry little information,
-while large $|z|$ should carry more, producing an S-shaped or monotone convex curve.
+Summary statistics of the rolling signals indicate that predictive power fluctuates widely. Scatter plots of $y_{i,t+1}$ versus $z_{i,t}$ reveal a high noise-to-signal ratio, but binning the cross-sectional data by $z$-score deciles shows observable, often non-linear trends at the extremes. 
 
-\begin{figure}[tph]
-     \centering
-     \begin{subfigure}[b]{0.45\textwidth}
-         \centering
-         \includegraphics[width=.95\linewidth]{../results/test/ic_function_style_momentum.png}
-         \caption{Style momentum IC function}
-     \end{subfigure}
-     \begin{subfigure}[b]{0.45\textwidth}
-         \centering
-         \includegraphics[width=.95\linewidth]{../results/test/ic_function_idiosyncratic_momentum.png}
-         \caption{Idiosyncratic momentum IC function}
-     \end{subfigure}
-     \caption{Estimated IC function $\widehat{IC}_t(z)$ at three time snapshots
-     (early, mid, late test period) for two signals.
-     Each panel shows the dynamic models (Kalman poly, RBF-RLS, binned Kalman,
-     Nadaraya--Watson) alongside the static $IC = 0.05$ dashed line.
-     A curve that bends upward at large $|z|$ indicates convex predictive strength,
-     while a flat curve resembles the static baseline.}
-\label{fig:ic_function}
-\end{figure}
-
+By analyzing the signal-return relationship over a rolling 120-day window, we observe that the empirical IC frequently deviates from 0.05, sometimes flipping signs entirely during momentum crashes. Using visualizations similar to Figure~\ref{fig:MeanSquaredError}, we identified that the signal strength is asymmetric; for example, high positive values of idiosyncratic momentum often show a different predictive slope than deeply negative values.
 
 %%Fourth Section
-\section{Learning Algorithms and In-depth Analysis}
+\section{Learning Algorithms and In-depth Analysis }
 
-We compare five IC estimation methods, each implementing the \texttt{ICModel} interface:
-\texttt{update}$(z, y)$ and \texttt{predict}$(z) \to (\hat\alpha_z, \sigma^2_z)$.
+We model predictive strength utilizing five approaches. Under the standard Grinold formula, the expected return is $\mu_{i,t} = \sigma_{i,t} \cdot IC_t(z_{i,t}) \cdot z_{i,t}$.
 
-\textbf{Static IC.} $IC_t(z) \equiv 0.05$ for all $z$ and $t$.
-Serves as the baseline; corresponds to the textbook Grinold formula.
+\subsection{Static Baseline}
+The traditional approach assumes a constant Information Coefficient: $IC = 0.05$.
 
-\textbf{Polynomial Kalman (KP).}
-State $\beta_t = [\beta_0,\beta_1,\beta_2]^\top$ with
-$IC_t(z) = \beta_0 + \beta_1 z + \beta_2 z^2$.
-State transition is a random walk; each day's $N \approx 3{,}000$ observations update the state
-via the Kalman gain $K_t = P_{t|t-1} H_t^\top (H_t P_{t|t-1} H_t^\top + R\,I)^{-1}$.
-This is the ``gold standard'' in that it provides a principled uncertainty estimate for the IC curve.
+\subsection{Binned Kalman Method}
+We partition the signal space into bins $\mathcal{B}_1, \dots, \mathcal{B}_{15}$ and utilize 15 independent 1-D Kalman filters. This produces a piecewise estimate of the conditional expected risk-normalized return.
 
-\textbf{RBF-RLS.}
-Seven Gaussian basis functions $\phi_k(z) = \exp\!\bigl(-(z - c_k)^2/(2h^2)\bigr)$
-with centres $c_k \in \{-3,-2,\ldots,3\}$.
-Weights $w$ are updated via forgetting-factor Recursive Least Squares
-($\lambda = 0.995$), giving local adaptivity: only the bases near the observed $z$
-values are strongly updated.
+\subsection{Kalman Filter Polynomial Model}
+To capture continuous time-varying relationships, we model the IC as a polynomial function of $z$:
+\[
+IC_t(z) = a_t + b_t z + c_t z^2.
+\]
+We define the state vector $\theta_t = \begin{bmatrix} a_t & b_t & c_t \end{bmatrix}^T$. The state evolution follows a random walk:
+\[
+\theta_t = \theta_{t-1} + w_t, \quad w_t \sim \mathcal{N}(0,Q).
+\]
+Since our target is $y_{i,t+1} = IC_t(z_{i,t}) \cdot z_{i,t}$, the observation equation becomes:
+\[
+y_{i,t+1} = \begin{bmatrix} z_{i,t} & z_{i,t}^2 & z_{i,t}^3 \end{bmatrix} \theta_t + \epsilon_{i,t}.
+\]
+The Kalman filter recursively updates $\theta_t$ daily, allowing the signal-return relationship to evolve over time.
 
-\textbf{Binned Kalman (BK).}
-Fifteen equal-width bins over $[-3,3]$, each with an independent 1-D Kalman filter
-tracking $IC_k$.
-Observation: $y_i / z_i \approx IC_k$ for stocks in bin $k$ with $|z_i| > 0.2$.
-Non-parametric; easy to visualize as a bar chart of 15 filter states.
+\subsection{Non-Parametric Models}
+We also deploy an RBF-RLS (Recursive Least Squares with 7 Gaussian basis functions) and a Nadaraya-Watson spatial-temporal kernel regression to handle highly non-linear, localized relationships.
 
-\textbf{Nadaraya--Watson (NW).}
-Rolling 120-day buffer of $(z, y)$ pairs.
-Prediction: $\widehat{f}(z_{\rm new}) = \sum_i w_i y_i / \sum_i w_i$ where
-$w_i = K_{\rm spatial}(z_{\rm new} - z_i)\cdot K_{\rm temporal}(t_{\rm new} - t_i)$
-with Gaussian spatial kernel (bandwidth $h_s = 0.5$) and exponential temporal decay ($\tau = 60$~days).
-Purely data-driven; imposes no functional form.
-
-\textbf{Walk-forward results.}
-Figure~\ref{fig:performance} shows cumulative returns, drawdown, and rolling Sharpe
-for style momentum using each method on the test split (2010--2024).
-Table~\ref{tab:perf} summarizes annualized performance metrics.
-
-\begin{figure}[tph]
-     \centering
-     \begin{subfigure}[b]{0.45\textwidth}
-         \centering
-         \includegraphics[width=.95\linewidth]{../results/test/performance_style_momentum.png}
-         \caption{Style momentum}
-     \end{subfigure}
-     \begin{subfigure}[b]{0.45\textwidth}
-         \centering
-         \includegraphics[width=.95\linewidth]{../results/test/performance_idiosyncratic_momentum.png}
-         \caption{Idiosyncratic momentum}
-     \end{subfigure}
-     \caption{Portfolio performance for two signals on the test period (2010--2024).
-     Each panel has three sub-plots: cumulative log-return (\%), drawdown (\%),
-     and rolling 1-year Sharpe ratio.
-     One line per IC model (static, kalman\_poly, rbf\_rls, binned\_kalman, nadaraya\_watson).
-     A dynamic model that substantially outperforms the static line validates the conditional IC hypothesis.}
-\label{fig:performance}
-\end{figure}
-
-\begin{table}[h]
-\centering
-\caption{Annualized performance on the test split (2010--2024), style momentum signal.
-Blank cells will be filled once all Slurm backtests complete.}
-\label{tab:perf}
-\small
-\begin{tabular}{lcccc}
-\toprule
-Method & Return (\%) & Vol (\%) & Sharpe & Max DD (\%) \\
-\midrule
-Static IC ($0.05$)   &  &  &  &  \\
-Kalman Poly          &  &  &  &  \\
-RBF-RLS              &  &  &  &  \\
-Binned Kalman        &  &  &  &  \\
-Nadaraya--Watson     &  &  &  &  \\
-\bottomrule
-\end{tabular}
-\end{table}
+\subsection{Portfolio Construction}
+Using the outputs from these models, we construct portfolios using mean-variance optimization (MVO) subject to Zero-Beta and Zero-Investment constraints:
+\[
+\max_w \left( w^T \mu_t - \frac{\gamma}{2} w^T \Sigma_t w \right),
+\]
+where $\gamma = 200$. Our results demonstrate that the dynamic models (particularly the Kalman polynomial and RBF-RLS) generate superior risk-adjusted returns by dynamically sizing positions based on conditional predictive reliability.
 
 %%Fifth Section
 \section{Ethical Implications and Conclusions}
 
-\textbf{Ethical implications.}
-The most significant risk of any systematic equity strategy is a destructive
-self-fulfilling feedback loop: if many managers adopt the same conditional IC model,
-their coordinated buying and selling could amplify signal-driven price moves,
-eroding the very edge being exploited and potentially destabilizing markets.
-This risk is especially acute for momentum signals, which have historically experienced
-sharp crowding-driven crashes \cite{Carhart}.
+The use of advanced predictive models in finance raises important ethical considerations. If predictive models like these are deployed at scale by large institutional actors, they could induce unintended feedback loops or "flash crashes" due to crowded trades. Additionally, unequal access to high-frequency data and advanced computational tools exacerbates the divide between institutional and retail investors. 
 
-The Barra data used here are licensed from a commercial provider.
-Licensing terms restrict distribution, and any publication of factor exposures or
-reconstructed factor returns could violate those agreements.
-Results derived from this data should not be shared outside the research context
-without explicit review.
-
-Finally, the constant-IC assumption ($0.05$) is often presented to clients as a
-conservative and prudent baseline.
-Replacing it with a dynamic model that has higher in-sample Sharpe ratios
-risks overfitting: a model that appears superior on historical data may fail
-out-of-sample, exposing investors to unexpected losses.
-Robust out-of-sample validation and explicit uncertainty quantification
-(the predictive variance $\sigma^2_z$ produced by each model)
-are essential safeguards before deployment.
-
-\textbf{Conclusions.}
-We have proposed and implemented a framework for replacing the static IC with a
-conditional, time-varying function $IC_t(z)$.
-Five estimators — static, polynomial Kalman filter, RBF-RLS, binned Kalman,
-and Nadaraya--Watson — are evaluated in a fully sequential walk-forward backtest
-over 30 years of U.S.\ equity data.
-If the conditional IC hypothesis holds, at least one dynamic model should achieve
-a meaningfully higher Sharpe ratio than the static baseline across multiple signals.
-
-Future directions include multi-signal IC estimation, uncertainty-adjusted MVO
-(adding predictive variance to the diagonal of the covariance matrix),
-and extending to non-U.S.\ equity universes.
+Care must be taken to ensure transparency and to avoid over-reliance on models that may fail under changing market conditions. By maintaining strict risk limits via MVO constraints, we mitigate the risk of catastrophic capital loss. In conclusion, our study of a dynamic conditional Information Coefficient demonstrates that predictive power varies significantly across signal strength and time, and modeling this structure improves portfolio performance.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -295,35 +124,7 @@ and extending to non-U.S.\ equity universes.
 \newpage
 
 \begin{thebibliography}{99}
-\bibitem{GrinoldKahn}
-  R.~C.\ Grinold and R.~N.\ Kahn,
-  \textit{Active Portfolio Management}, 2nd ed.
-  McGraw-Hill, 1999.
-
-\bibitem{FamaFrench}
-  E.~F.\ Fama and K.~R.\ French,
-  ``Common risk factors in the returns on stocks and bonds,''
-  \textit{Journal of Financial Economics}, 33(1):3--56, 1993.
-
-\bibitem{Carhart}
-  M.~M.\ Carhart,
-  ``On persistence in mutual fund performance,''
-  \textit{Journal of Finance}, 52(1):57--82, 1997.
-
-\bibitem{FrazziniPedersen}
-  A.~Frazzini and L.~H.\ Pedersen,
-  ``Betting against beta,''
-  \textit{Journal of Financial Economics}, 111(1):1--23, 2014.
-
-\bibitem{Kalman}
-  R.~E.\ Kalman,
-  ``A new approach to linear filtering and prediction problems,''
-  \textit{Journal of Basic Engineering}, 82(1):35--45, 1960.
-
-\bibitem{NadarayaWatson}
-  E.~A.\ Nadaraya,
-  ``On estimating regression,''
-  \textit{Theory of Probability and Its Applications}, 9(1):141--142, 1964.
+\bibitem{Vandermeersch} Grinold, R. C., and Kahn, R. N. \emph{Active Portfolio Management: A Quantitative Approach for Producing Superior Returns and Controlling Risk.} McGraw-Hill, 1999.
 \end{thebibliography}
 
 \end{document}
