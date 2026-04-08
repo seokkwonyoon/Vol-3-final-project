@@ -334,7 +334,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=23.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "sf-backtester" },
-    { name = "sf-quant", editable = "../sf-quant" },
+    { name = "sf-quant", specifier = ">=0.2.6" },
 ]
 provides-extras = ["dev"]
 
@@ -1465,8 +1465,8 @@ wheels = [
 
 [[package]]
 name = "sf-quant"
-version = "0.1.23"
-source = { editable = "../sf-quant" }
+version = "0.2.7"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cvxpy" },
     { name = "dataframely" },
@@ -1481,30 +1481,9 @@ dependencies = [
     { name = "statsmodels" },
     { name = "tqdm" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "cvxpy", specifier = ">=1.7.2" },
-    { name = "dataframely", specifier = ">=1.14.0" },
-    { name = "ipywidgets", specifier = ">=8.1.8" },
-    { name = "matplotlib", specifier = ">=3.10.5" },
-    { name = "numpy", specifier = ">=2.3.2" },
-    { name = "polars", specifier = ">=1.32.3" },
-    { name = "polars-ols", specifier = ">=0.3.5" },
-    { name = "python-dotenv", specifier = ">=1.1.1" },
-    { name = "ray", specifier = ">=2.49.0" },
-    { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "statsmodels", specifier = ">=0.14.0" },
-    { name = "tqdm", specifier = ">=4.67.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "ipykernel", specifier = ">=7.1.0" },
-    { name = "pydata-sphinx-theme", specifier = ">=0.16.1" },
-    { name = "ruff", specifier = ">=0.15.0" },
-    { name = "sphinx", specifier = ">=8.2.3" },
-    { name = "sphinx-autobuild", specifier = ">=2025.8.25" },
+sdist = { url = "https://files.pythonhosted.org/packages/e1/0a/b4f112475491d61100ff44f384a012b06b092bc5571ec57f48296517cab7/sf_quant-0.2.7.tar.gz", hash = "sha256:cb244f4ae709dbb2dc48294cbd9c5a288a94c5aec9855420c55654768942a53a", size = 150399, upload-time = "2026-04-07T17:22:38.099Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/ea/ba4242dabd51a7219819b54bc3731111cee2825082d34ad718dd02c1d6b9/sf_quant-0.2.7-py3-none-any.whl", hash = "sha256:9f5a430cd7f4a09ebf45242067a517629cadfb3639373780fce5a1de08ad9969", size = 62796, upload-time = "2026-04-07T17:22:39.084Z" },
 ]
 
 [[package]]

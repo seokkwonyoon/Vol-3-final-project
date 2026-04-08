@@ -58,6 +58,7 @@ class Tee:
     def write(self, message):
         self.terminal.write(message)
         self.log.write(message)
+        self.log.flush()
 
     def flush(self):
         self.terminal.flush()
@@ -143,14 +144,10 @@ def visualise_ic_function(
                 on=["date", "barrid"], how="inner",
             ).sort("date", "barrid")
 
-            past_dates = joined["date"].unique().sort()
-            for i in range(1, len(past_dates)):
-                d = past_dates[i - 1]
-                day = joined.filter(pl.col("date") == d)
-                z_arr = day["z_score"].to_numpy()
-                # alpha_z ≈ IC(z)*z; use as training target (y ≈ alpha/sigma ~ r/sigma)
-                y_arr = day["alpha"].to_numpy()
-                model.update(z_arr, y_arr)
+            # Group by date once and iterate over pre-partitioned arrays
+            joined_pd = joined.select(["date", "z_score", "alpha"]).to_pandas()
+            for _, day in joined_pd.groupby("date", sort=True):
+                model.update(day["z_score"].to_numpy(), day["alpha"].to_numpy())
 
             alpha_z_pred, _ = model.predict(z_grid)
             with np.errstate(divide="ignore", invalid="ignore"):

@@ -16,8 +16,5 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
-[tool.uv.sources]
-sf-quant = { path = "../sf-quant", editable = true }
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]

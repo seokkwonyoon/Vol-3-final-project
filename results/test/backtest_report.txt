@@ -1,0 +1,12 @@
+
+Backtest Summary — test
+Strategy                                      Mean%    Vol%   Sharpe   MaxDD%
+-----------------------------------------------------------------------------
+style_momentum/static                         0.18    0.89    0.200    -1.97
+style_momentum/kalman_poly                    0.48    0.59    0.815    -0.42
+style_momentum/rbf_rls                       -0.01    0.04   -0.184    -0.05
+style_momentum/binned_kalman                  0.39    0.26    1.506    -0.16
+style_momentum/nadaraya_watson                0.07    0.04    1.553    -0.05
+-----------------------------------------------------------------------------
+
+Chart → /home/connerd4/silverfund/dynamic_ic/results/test/performance_style_momentum.png

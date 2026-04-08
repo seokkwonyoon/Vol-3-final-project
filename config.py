@@ -7,6 +7,7 @@ import datetime as dt
 SPLITS = {
     "full":   {"start": dt.date(1995, 1, 1), "end": dt.date(2025, 1, 1)},
     "recent":  {"start": dt.date(2010, 1, 1), "end": dt.date(2025, 1, 1)},
+    "test": {"start": dt.date(2022, 1, 1), "end": dt.date(2024, 1, 1)}
 }
 
 # ── Strategy parameters ──────────────────────────────────────────────────────
