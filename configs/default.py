@@ -2,6 +2,7 @@
 Shared configuration for the dynamic IC pipeline.
 """
 import datetime as dt
+from pathlib import Path
 
 # ── Date splits ─────────────────────────────────────────────────────────────
 SPLITS = {
@@ -9,6 +10,9 @@ SPLITS = {
     "recent":  {"start": dt.date(2010, 1, 1), "end": dt.date(2025, 1, 1)},
     "test": {"start": dt.date(2022, 1, 1), "end": dt.date(2024, 1, 1)}
 }
+
+# Active split — change this to switch between "full", "recent", or "test"
+SPLIT = "recent"
 
 # ── Strategy parameters ──────────────────────────────────────────────────────
 STATIC_IC = 0.05             # Baseline IC for the static benchmark
@@ -93,17 +97,17 @@ SLURM_CPUS_TRAIN   = 4     # sequential loop; extra CPUs don't help
 SLURM_MEM_TRAIN    = "32G"
 
 # Phase 3: MVO via Ray (one task per signal×model)
-SLURM_TIME_MVO     = "03:00:00"   # 15 yr × 5 min/yr = 75 min + buffer
+SLURM_TIME_MVO     = "01:30:00"   # 15 yr × 5 min/yr = 75 min + buffer
 SLURM_CPUS_MVO     = 16           # Ray fans out across all CPUs
 SLURM_MEM_MVO      = "64G"
 
 # Phase 4: analysis and chart generation
-SLURM_TIME_ANALYZE = "00:15:00"
+SLURM_TIME_ANALYZE = "01:00:00"
 SLURM_CPUS_ANALYZE = 4
 SLURM_MEM_ANALYZE  = "32G"
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-PROJECT_ROOT = "/home/connerd4/silverfund/dynamic_ic"
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 FACTORS_PATH = "/home/connerd4/groups/grp_quant/database/research/factors/factors_*.parquet"
 EXPOSURES_PATH = "/home/connerd4/groups/grp_quant/database/research/exposures/exposures_*.parquet"
 BYU_EMAIL = "connerd4@byu.edu"

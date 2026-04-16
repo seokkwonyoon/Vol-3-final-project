@@ -8,7 +8,7 @@ Only processes years whose weight files do not already exist, so
 resubmitting after a partial failure picks up exactly where it left off.
 
 Usage:
-    uv run python mvo.py --split recent --signal style_momentum --model static
+    uv run python mvo.py --signal style_momentum --model static
 """
 import argparse
 import os
@@ -18,10 +18,10 @@ import polars as pl
 from sf_quant.backtester import backtest_parallel
 
 from configs import (
-    SPLITS, SIGNALS, MODELS, GAMMA, CONSTRAINTS,
+    SPLITS, SPLIT, SIGNALS, MODELS, GAMMA, CONSTRAINTS,
     alphas_path, weights_dir,
 )
-from timing import record_elapsed
+from timing import record_elapsed, setup_logging
 
 
 def _resolve_constraints(names: list[str]):
@@ -37,19 +37,20 @@ def _resolve_constraints(names: list[str]):
 
 def main():
     parser = argparse.ArgumentParser(description="MVO for one (signal, model) pair")
-    parser.add_argument("--split", required=True, choices=list(SPLITS.keys()))
     parser.add_argument("--signal", required=True, choices=SIGNALS)
     parser.add_argument("--model", required=True, choices=MODELS)
+    parser.add_argument("--config", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    setup_logging("mvo", signal=args.signal, model=args.model)
 
-    a_path = alphas_path(args.split, args.signal, args.model)
+    a_path = alphas_path(SPLIT, args.signal, args.model)
     if not os.path.exists(a_path):
         raise FileNotFoundError(
             f"Alpha parquet not found: {a_path}\n"
             "Run train.py (Phase 2) before mvo.py (Phase 3)."
         )
 
-    w_dir = weights_dir(args.split, args.signal, args.model)
+    w_dir = weights_dir(SPLIT, args.signal, args.model)
     alphas_df = pl.read_parquet(a_path)
     all_years = alphas_df["date"].dt.year().unique().sort().to_list()
 
@@ -79,7 +80,7 @@ def main():
         yr_weights = weights.filter(pl.col("date").dt.year() == year)
         yr_weights.write_parquet(f"{w_dir}/{year}.parquet")
 
-    record_elapsed("mvo", f"{args.signal}/{args.model}/{args.split}", elapsed)
+    record_elapsed("mvo", f"{args.signal}/{args.model}/{SPLIT}", elapsed)
     print(f"✓ MVO complete → {w_dir}/  ({elapsed:.0f}s)")
 
 

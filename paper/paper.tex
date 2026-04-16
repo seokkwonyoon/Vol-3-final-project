@@ -11,6 +11,7 @@
 \usepackage{hyperref} %makes cross references into hyperlinks.
 \usepackage{caption}
 \usepackage{subcaption} %Allows subfigures
+\usepackage{booktabs}
 
 
 %%% WARNING: Do NOT change the page size, fonts, or margins!  Penalties will apply.
@@ -26,229 +27,371 @@
 \maketitle
 
 \begin{abstract}
-The Information Coefficient (IC) measures a signal's predictive power over realized returns and
-is typically assumed constant at $IC \approx 0.05$.  We relax this by modeling a dynamic,
-signal-strength-dependent function $IC_t(z)$, where $z$ is a cross-sectionally standardized
-signal.  Five online-learning methods---a constant baseline, independent binned Kalman filters,
-a polynomial Kalman filter, RBF recursive least squares, and Nadaraya-Watson kernel
-regression---are evaluated across eight equity signals through walk-forward mean-variance
-optimization over a 2010--2024 backtest period.  Dynamic models consistently outperform the
-static baseline in risk-adjusted returns, confirming that predictive power concentrates in
-signal extremes and shifts with market regime.
+The Information Coefficient (IC) measures a signal's predictive power over
+realized returns and is typically assumed constant at $IC \approx 0.05$.
+We relax this assumption by modeling a dynamic, signal-strength-dependent
+function $IC_t(z)$, where $z$ is a cross-sectional z-score.
+Five core challenges motivate this work: volatility clustering, fat-tailed
+returns, observation scarcity at extreme z-scores, regime-dependent IC
+shifts, and a signal-to-noise ratio (SNR) of only $0.05$.
+We address these using two kernel-based online learners---Gaussian Process
+Regression (GPR) and Kernel Ridge Regression (KRR)---applied across eight
+equity signals through a walk-forward mean-variance backtest over 2010--2024.
+Both models encode the assumed SNR directly into their regularization and
+can produce negative IC estimates, correctly inverting signals whose
+predictive direction reverses with market regime.
 \end{abstract}
 
 %% First Section
 \section{Research Question and Overview of the Data}
 
-Classical active management theory, formalized by Grinold and Kahn~\cite{GrinoldKahn1999},
-states that the expected alpha for asset $i$ at time $t$ is
-$\alpha_{i,t} = IC \cdot \sigma_{i,t} \cdot z_{i,t}$,
-where $\sigma_{i,t}$ is idiosyncratic risk, $z_{i,t}$ is the standardized signal, and $IC$ is
-treated as a universal constant.  Our central question is: \emph{does IC vary with signal
-strength $z$ and with calendar time $t$, and can online learning models capture this variation
-to improve portfolio performance?}
+Classical active management theory, formalized by Grinold and
+Kahn~\cite{GrinoldKahn1999}, states that the expected alpha for asset $i$
+at time $t$ is
+\[
+  \alpha_{i,t} = IC \cdot \sigma_{i,t} \cdot z_{i,t},
+\]
+where $\sigma_{i,t}$ is idiosyncratic risk, $z_{i,t}$ is the standardized
+signal, and $IC$ is treated as a universal constant.
+Our central question is: \emph{does IC vary with signal strength $z$ and
+calendar time $t$, and can kernel-based models capture this variation to improve portfolio performance?}
 
-Prior work provides motivation but not resolution.  Clarke et al.~\cite{Clarke2002} document
-regime-dependence of momentum ICs and Qian and Hua~\cite{QianHua2004} study time-varying IC in
-factor timing; neither estimates the full conditional function $IC_t(z)$.  We fill this gap with
-five online estimators applied to eight daily cross-sectional signals derived from a licensed
-Barra U.S.\ equity factor model (2010--2025): \emph{style, industry, and idiosyncratic momentum
-and reversal; idiosyncratic volatility; and betting-against-beta (BAB).}
+Prior work provides motivation but not resolution.  Clarke et
+al.~\cite{Clarke2002} document regime-dependence of momentum ICs, and Qian
+and Hua~\cite{QianHua2004} study time-varying IC in factor timing; neither
+estimates the full conditional function $IC_t(z)$.
 
-\begin{itemize}
-  \item \textbf{Weaknesses.}  Daily return data is extremely noisy; realized Sharpe ratios are
-    well below one.  Micro-cap stocks introduce large outliers and the factor model imposes
-    a linear exposure structure that may misspecify tail behavior.
-  \item \textbf{Suitability.}  Eight approximately uncorrelated signals satisfy the breadth
-    requirement of the Fundamental Law, and Barra specific-risk estimates enable theoretically
-    grounded risk normalization.
-  \item \textbf{Expected findings.}  Tail $z$-scores ($|z| > 2$) will carry disproportionate
-    predictive power, and this structure will vary across momentum-crash regimes.
-  \item \textbf{Further questions.}  Can $IC_t(z)$ detect signal decay in real time?  Does the
-    optimal function differ materially across sectors or market-cap strata?
-\end{itemize}
+\textbf{Five empirical challenges.}
+The raw data confront any estimator with five structural difficulties.\\
+\emph{(1) Volatility clustering and heteroskedasticity:} equity return
+variance is not constant, (it clusters in crisis periods), so a fixed-scale
+regression target distorts IC estimates.\\
+\emph{(2) Fat-tailed return distribution:} daily stock returns exhibit
+excess kurtosis well beyond what a Gaussian model assumes, inflating apparent
+noise.\\
+\emph{(3) Sparse tail observations:} by construction, z-scores follow an
+approximately standard normal distribution, so fewer than 5\% of
+observations lie outside $|z| > 2$ (see Figure~\ref{fig:blob}).
+The IC function is hardest to estimate precisely in the tails---yet tail
+stocks often drive portfolio performance disproportionately.\\
+\emph{(4) Time-varying IC:} momentum ICs turn sharply negative during factor
+crashes (e.g., the 2020 COVID reversal, the 2022 growth-to-value rotation),
+while reversal ICs can briefly turn positive.
+A static model cannot track these shifts.\\
+\emph{(5) Extreme signal-to-noise ratio:} we assume $\mathrm{SNR} = 0.05$,
+meaning roughly 95\% of cross-sectional return variance is idiosyncratic
+noise unrelated to any signal.  This leaves only a tiny gradient for any
+learning algorithm to follow.
 
 \begin{figure}[tph]
   \centering
-  \begin{subfigure}[b]{0.45\textwidth}
-    \centering
-    \includegraphics[width=.95\linewidth]{crossover1.png}
-  \end{subfigure}
-  \begin{subfigure}[b]{0.45\textwidth}
-    \centering
-    \includegraphics[width=.95\linewidth]{crossover2.png}
-  \end{subfigure}
-  \caption[Estimated conditional IC curves]{Left: piecewise $IC(z)$ from the binned Kalman
-  method; bins at the tails of the $z$-distribution accumulate substantially higher IC
-  estimates than central bins.  Right: the polynomial Kalman filter's $IC_t(z)$ curve at three
-  calendar checkpoints, illustrating how the curve flattens during known factor-crash periods.
-  Both panels reveal non-linearities that a constant $IC = 0.05$ baseline cannot represent.}
-  \label{fig:IcCurves}
+  \includegraphics[width=0.82\linewidth]{blob_chart.png}
+  \caption[Z-score vs.\ risk-normalized return]{Scatter of cross-sectional
+  z-score $z_{i,t}$ against risk-normalized return $y_{i,t} = r_{i,t+1}/\sigma_{i,t}$
+  over a representative 120-day window (subsampled for clarity).
+  The OLS slope---the realized IC---is barely distinguishable from zero
+  against the noise cloud, illustrating the SNR $\approx 0.05$ regime.
+  Observations thin out past $|z| = 2$ (dashed lines), making tail IC
+  estimates the least reliable and the most consequential.
+  Binned means (blue circles) show that the IC function is non-constant
+  across the z-score range, motivating a non-linear estimator.}
+  \label{fig:blob}
 \end{figure}
+
+\textbf{Data.}
+We use eight daily cross-sectional equity signals derived from the Barra
+U.S.\ equity factor model (2010--2025), covering roughly 3,000 in-universe
+stocks per day:
+\emph{style momentum, industry momentum, idiosyncratic momentum, style
+reversal, industry reversal, idiosyncratic reversal, idiosyncratic
+volatility, and betting-against-beta (BAB)~\cite{FrazziniPedersen2014}.}
+All reversal signals are \emph{negated} at construction---a stock with a
+large negative recent return receives a large positive z-score because
+reversion is the intended bet.  In a pure reversion regime this works as
+intended (IC $> 0$).  In a momentum regime, however, industries or styles
+that have recently declined continue to decline, and the same signal
+produces IC $< 0$.  A model that can only output $IC = +0.05$ will be
+systematically wrong-footed; a model that can output negative IC will
+naturally invert the position.  This motivates our kernel models, which
+place no sign constraint on $\widehat{IC}(z)$.
+
+\begin{itemize}
+  \item \textbf{Weaknesses.}  Daily data is extremely noisy, realized Sharpe
+    ratios are well below one, and the Barra linear exposure structure may
+    misspecify the signal mapping at extremes.
+  \item \textbf{Suitability.}  Eight approximately uncorrelated signals
+    satisfy the breadth requirement of the Fundamental Law, and Barra
+    specific-risk estimates enable theoretically grounded risk normalization.
+  \item \textbf{Expected findings.}  The IC function $IC_t(z)$ is non-linear
+    and non-stationary.  Dynamic kernel models will outperform the static
+    baseline, and the improvement will be largest for signals that change
+    sign (industry and style reversal).
+\end{itemize}
 
 %% Second Section
 \section{Data Cleaning and Feature Engineering}
 
-\textbf{Cross-sectional standardization.}  On each date $t$ the raw signal $s_{i,t}$ is
-winsorized and standardized: $z_{i,t} = (s_{i,t} - \bar{s}_t) / \mathrm{std}_t(s)$, clipped to
-$[-3, 3]$.  This ensures that all signals live on the same scale and prevents outliers from
-dominating the regression.
+We describe how each of the five challenges identified in Section~1 is
+addressed---and where we chose not to act, we explain why.
 
-\textbf{Risk-normalized target.}  Rather than regressing on raw returns $r_{i,t+1}$ we set
+\textbf{Volatility clustering and heteroskedasticity (addressed).}
+Rather than regressing on raw returns $r_{i,t+1}$, we set the target
 \[
   y_{i,t} = \frac{r_{i,t+1}}{\sigma_{i,t}},
 \]
-where $\sigma_{i,t}$ is the Barra specific risk.  Under the Grinold decomposition,
-$\mathbb{E}[y_{i,t} \mid z_{i,t}] \approx IC_t(z_{i,t}) \cdot z_{i,t}$, so dividing by
-$\sigma_{i,t}$ makes the regression intercept directly interpretable as the IC, removing the
-confounding effect of heteroskedastic volatility.
+where $\sigma_{i,t}$ is the Barra annualized specific risk (converted from
+percent to decimal).  Under the Grinold decomposition,
+$\mathbb{E}[y_{i,t} \mid z_{i,t}] \approx IC_t(z_{i,t}) \cdot z_{i,t}$,
+so this division makes the regression slope directly interpretable as IC and
+removes the cross-sectional scale heteroskedasticity introduced by varying
+stock volatilities.  We do \emph{not} model time-series GARCH dynamics; we
+rely entirely on the daily Barra specific-risk estimate to capture
+volatility clustering.
 
-\textbf{Universe filter.}  A minimum price filter ($> \$5.00$) removes illiquid micro-cap
-stocks.  Retaining them would inflate apparent IC while introducing execution costs that
-cannot be modeled in a daily rebalancing backtest.
+\textbf{Non-normal return distribution (partially addressed).}
+Winsorizing the raw signals to the 1\textsuperscript{st}--99\textsuperscript{th}
+percentile cross-sectionally before z-scoring, and then clipping z-scores
+to $[-3, 3]$, limits the leverage of extreme outliers in the
+regression.  Risk-normalization by $\sigma_{i,t}$ absorbs some of the
+excess kurtosis because high-kurtosis stocks tend to also have high
+predicted volatility.  We do not, however, switch to a heavy-tailed
+likelihood.  Gaussian Process Regression assumes a Gaussian observation
+model; a Student-$t$ process would be more principled for fat-tailed equity
+returns but is substantially more complex to implement in an online setting
+and was outside scope.
 
-\textbf{Walk-forward discipline.}  All model state is updated at time $t$ using only
-$(z_{i,s}, y_{i,s})$ for $s \leq t$; portfolios are formed using forecasts for $t+1$.  This
+\textbf{Sparse tail observations (partially addressed).}
+The RBF kernel used by both GPR and KRR evaluates similarity between
+z-scores using $k(z, z') = \exp(-\gamma\|z - z'\|^2)$, which decays
+smoothly with distance.  A prediction at $z = 2.5$ is therefore informed by
+all observations near $z = 2.5$, with contributions from closer points
+weighted more heavily.  GPR goes further: it returns a predictive standard
+deviation $\sigma_{\widehat{IC}}(z)$ that naturally widens in data-sparse
+regions, giving the downstream optimizer an explicit signal that tail
+IC estimates are less reliable.  We acknowledge the hard constraint imposed
+by clipping: because z-scores are capped at $\pm 3$ during preprocessing,
+no observations ever lie outside this range, and the learned IC function
+cannot be validated there.
+
+\textbf{Time-varying IC (addressed).}
+Each model maintains a rolling buffer of the most recent $W = 120$ trading
+days ($\approx 6$ months) of $(z, y)$ observations.  After each day's data
+arrives, the oldest observation is discarded and the model is refit on the
+updated buffer.  This gives implicit exponential-recency weighting: an
+observation $k$ days old survives in the buffer only if $k \leq 120$ and
+contributes equally to the fit regardless of age within that window.  We do
+not attempt explicit changepoint detection; the window size $W = 120$ is a
+fixed hyperparameter chosen to balance estimation stability against regime
+responsiveness.
+
+\textbf{Extreme signal-to-noise ratio (addressed).}
+We assume $\mathrm{SNR} = 0.05$, yielding
+\[
+  \text{noise proportion} = 1 - \frac{\mathrm{SNR}}{1+\mathrm{SNR}}
+    = \frac{1}{1.05} \approx 0.952,
+  \qquad
+  \text{noise-to-signal ratio} \approx 19.0.
+\]
+Both models encode this assumption directly into their regularization:
+GPR fixes its noise kernel at $\sigma_n^2 = 0.952$; KRR sets its ridge
+penalty to $\alpha = 19.0$.  The SNR value is assumed rather than estimated
+from data---a mis-specified SNR shifts the effective regularization of both
+models in the same direction, so a robustness check would be warranted in
+production.
+
+\textbf{Universe filter.}
+A minimum price filter ($>\$5.00$) removes illiquid micro-cap stocks.
+Retaining them would inflate apparent IC estimates while introducing
+execution costs that cannot be modeled in a daily rebalancing backtest.
+
+\textbf{Walk-forward discipline.}
+All model state is updated at time $t$ using only $(z_{i,s}, y_{i,s})$ for
+$s \leq t$; portfolios are formed using forecasts for $t+1$.  This
 eliminates look-ahead bias and mirrors a live trading environment.
 
 %% Third Section
 \section{Data Visualization and Basic Analysis}
 
-By construction, each signal's cross-sectional $z$-distribution is approximately standard
-normal.  The key non-trivial statistic is the \emph{realized IC}: the daily cross-sectional
-correlation between $z_{i,t}$ and $y_{i,t+1}$.  Computed over a rolling 120-day window, the
-realized IC for style momentum varies from $-0.04$ to $+0.12$, with sharp negative episodes
-coinciding with documented momentum crashes (2020 COVID reversal, 2022 growth-to-value
-rotation).  Binning $y_{i,t}$ by $z$-score decile reveals that the outer deciles contribute
-two to three times more predictive power per unit of $z$ than the inner deciles, motivating
-a non-constant $IC(z)$.
+Figure~\ref{fig:blob} illustrates the fundamental estimation challenge.
+Each plotted point is one $(z_{i,t}, y_{i,t})$ pair from a representative
+120-day window, producing roughly 360{,}000 observations for a universe of
+$\approx 3{,}000$ stocks.  The noise cloud is enormous relative to any
+signal: the OLS regression line, whose slope estimates IC, has a slope of
+approximately 0.05 but is nearly indistinguishable from horizontal at this
+scale.  The concentration of mass near $z = 0$ and the thinning past
+$|z| = 2$ (dashed vertical lines) are immediately visible.
 
-Figure~\ref{fig:IcCurves} visualizes this structure directly.  The left panel shows the
-binned Kalman's learned piecewise IC; the right panel shows the polynomial Kalman at three
-calendar checkpoints, illustrating regime change.  A flat $IC = 0.05$ line would miss both
-the tail asymmetry and the temporal variation.
+Binned means (blue circles) reveal that the IC function is not flat across
+the z-score range---the outer bins show systematically higher (or lower)
+mean $y$ per unit $z$ than the inner bins---motivating a flexible,
+non-parametric estimator rather than a single constant.
 
-%%Fourth Section
+For reversal signals such as industry reversal, the rolling 120-day realized
+IC ranges from approximately $-0.03$ to $+0.08$ over the 2010--2024 period,
+with sustained negative episodes during momentum-driven markets.  A static
+IC of $+0.05$ would generate wrong-signed alphas throughout those episodes,
+turning a potentially profitable signal into a loss-making one.
+
+% TODO: Insert performance charts (cumulative return, drawdown, rolling
+% Sharpe) once backtest results are available from analyze.py.
+
+%% Fourth Section
 \section{Learning Algorithms and In-Depth Analysis}
 
-Each model produces a forecast $\hat{\alpha}_{i,t} = \widehat{IC_t}(z_{i,t}) \cdot z_{i,t}$
-which is multiplied by $\sigma_{i,t}$ to recover the alpha in return units and fed into the
-optimizer.
+Each model produces a forecast
+$\hat{\alpha}_{i,t} = \widehat{IC_t}(z_{i,t}) \cdot \sigma_{i,t} \cdot z_{i,t}$,
+which is fed into the portfolio optimizer described in
+Section~\ref{sec:mvo}.
 
 \subsection{Static Baseline}
-$\widehat{IC_t}(z) = 0.05$ for all $z, t$, giving $\hat{\alpha}_{i,t} = 0.05\,\sigma_{i,t}\,z_{i,t}$.
 
-\subsection{Binned Kalman Filters}
-The $z$-axis is partitioned into $N = 15$ equal-width bins $\mathcal{B}_1, \ldots, \mathcal{B}_N$.
-Each bin $k$ runs an independent scalar Kalman filter tracking $IC_k^t$.  For assets in bin $k$,
-the observation $y_i / z_i \approx IC_k$ holds when $|z_i| \geq 0.2$; the within-bin mean
-$\hat{IC}_{k,t} = n_{k,t}^{-1}\!\sum_{i \in \mathcal{B}_k} y_{i,t}/z_{i,t}$
-has effective variance $R/n_{k,t}$.  The filter recursion is
-\begin{align*}
-  p_{k,t}^{-} &= p_{k,t-1} + Q, \qquad
-  K_{k,t} = \frac{p_{k,t}^{-}}{p_{k,t}^{-} + R/n_{k,t}}, \\
-  IC_{k,t} &= IC_{k,t-1} + K_{k,t}\!\left(\hat{IC}_{k,t} - IC_{k,t-1}\right), \qquad
-  p_{k,t} = (1 - K_{k,t})\,p_{k,t}^{-},
-\end{align*}
-with $Q = 10^{-4}$, $R = 1$, and prior $IC_{k,0} = 0.05$.
+$\widehat{IC_t}(z) = 0.05$ for all $z$ and all $t$, giving
+$\hat{\alpha}_{i,t} = 0.05\,\sigma_{i,t}\,z_{i,t}$.
+The baseline is our benchmark: it cannot adapt its estimates to regime
+changes, cannot learn that IC varies with signal strength, and
+---critically---cannot output a negative IC estimate.  If a reversal signal
+temporarily switches to a momentum regime, the static model continues to
+bet on reversion, taking the wrong side of the trade.
 
-\subsection{Polynomial Kalman Filter}
-We parameterize $IC_t(z) = \beta_{0,t} + \beta_{1,t} z + \beta_{2,t} z^2$, so
-$\hat\alpha_z = IC_t(z)\cdot z = \beta_{0,t} z + \beta_{1,t} z^2 + \beta_{2,t} z^3$.
-Defining $\boldsymbol\beta_t = [\beta_0,\beta_1,\beta_2]^\top$ and the per-asset observation
-row $\mathbf{h}_i = [z_i,\, z_i^2,\, z_i^3]$, the batch observation model for the full
-cross-section is $\mathbf{y}_t = H_t\boldsymbol\beta_t + \boldsymbol\varepsilon_t$ with
-$\boldsymbol\varepsilon_t \sim \mathcal{N}(\mathbf{0}, R\,I)$.  The state evolves as a random
-walk $\boldsymbol\beta_t = \boldsymbol\beta_{t-1} + \mathbf{w}_t$, $\mathbf{w}_t \sim
-\mathcal{N}(\mathbf{0}, Q\,I)$~\cite{Kalman1960}.  The Kalman update is:
-\begin{align*}
-  P_t^{-} &= P_{t-1} + Q\,I, \qquad
-  S_t = H_t P_t^{-} H_t^\top + R\,I_n, \qquad
-  K_t = P_t^{-} H_t^\top S_t^{-1}, \\
-  \boldsymbol\beta_t &= \boldsymbol\beta_t^{-} + K_t\!\left(\mathbf{y}_t - H_t\boldsymbol\beta_t^{-}\right),
-  \qquad P_t = (I - K_t H_t)\,P_t^{-}.
-\end{align*}
-The initial state $\boldsymbol\beta_0 = [0, 0.05, 0]^\top$ matches the static baseline.
+\subsection{Gaussian Process Regression}
 
-\subsection{RBF Recursive Least Squares}
-We fix $K = 7$ Gaussian basis functions centered at $c_k \in \{-3,-2,\ldots,3\}$:
-$\varphi_k(z) = \exp\!\bigl(-(z-c_k)^2/2\sigma^2\bigr)$, and model
-$\hat\alpha_z = \boldsymbol\Phi\,\mathbf{w}$.
-Applying the matrix-inversion lemma to the weighted least-squares criterion with forgetting
-factor $\lambda = 0.995$ yields the RLS update~\cite{Haykin2002}:
-\begin{align*}
-  A_t &= \lambda I_n + \Phi_t P_{t-1} \Phi_t^\top, \qquad
-  K_t = P_{t-1}\Phi_t^\top A_t^{-1}, \\
-  \mathbf{w}_t &= \mathbf{w}_{t-1} + K_t(\mathbf{y}_t - \Phi_t \mathbf{w}_{t-1}), \qquad
-  P_t = \lambda^{-1}(P_{t-1} - K_t \Phi_t P_{t-1}).
-\end{align*}
-The forgetting factor down-weights observations aged $\Delta t$ days by $\lambda^{\Delta t}$,
-giving an effective half-life of $\log 2 / |\!\log\lambda| \approx 138$ days.
-
-\subsection{Nadaraya-Watson Kernel Regression}
-The Nadaraya-Watson estimator~\cite{Nadaraya1964,Watson1964} defines the conditional mean as:
+A Gaussian Process places a prior directly over functions $f \colon
+\mathbb{R} \to \mathbb{R}$~\cite{RasmussenWilliams2006}.  We use the kernel
 \[
-  \hat{f}_t(z) = \frac{\displaystyle\sum_{s \leq t}\sum_i K_s(z, z_{i,s})\,\kappa_t(t-s)\,y_{i,s}}
-                      {\displaystyle\sum_{s \leq t}\sum_i K_s(z, z_{i,s})\,\kappa_t(t-s)},
+  k(z, z') = C \cdot \exp\!\Bigl(-\tfrac{(z-z')^2}{2\ell^2}\Bigr)
+             + \sigma_n^2\,\delta(z, z'),
 \]
-where $K_s(z,z') = \exp\!\bigl(-(z-z')^2/2h_s^2\bigr)$ is a Gaussian spatial kernel
-($h_s = 0.5$) and $\kappa_t(\Delta t) = e^{-\Delta t/\tau}$ is exponential temporal decay
-($\tau = 60$ days).  Storing the full history would require $O(T \cdot n)$ memory and
-$O(T \cdot n^2)$ work per day.  Instead we maintain running sums
-$S_w(z_g) = \sum k_s k_t$ and $S_{wy}(z_g) = \sum k_s k_t y$ on a grid of 200 points
-aged by $e^{-1/\tau}$ each day, reducing per-day cost to $O(n_{\text{grid}} \cdot n_{\text{obs}})$.
+a scaled RBF (length scale $\ell = 1$) plus a white-noise term.  The key
+design choice is fixing $\sigma_n^2 = 0.952$ and disabling kernel
+hyperparameter optimization entirely.  Without this constraint, the
+optimizer would reduce $\sigma_n^2$ toward zero to reduce training loss,
+effectively interpolating through noise and producing a wildly overfit IC
+curve.  Fixing the noise level forces the GP to produce the \emph{smoothest
+function consistent with the data under the assumption that 95\% of the
+observed variance is irreducible noise}.
+
+Given the buffer of $(z_{i,s}, y_{i,s})$ pairs from the last 120 days,
+the posterior predictive mean at a new z-score $z^*$ is the IC estimate
+$\widehat{IC}(z^*)$, and the posterior standard deviation
+$\sigma_{\widehat{IC}}(z^*)$ quantifies uncertainty.
+Alpha variance is propagated as
+$\operatorname{Var}[\hat{\alpha}] = z^{*2}\,\sigma_{\widehat{IC}}^2(z^*)$,
+and this per-stock uncertainty enters the MVO covariance matrix directly,
+down-weighting positions where the IC estimate is unreliable.
+
+Because $\widehat{IC}(z^*)$ is unconstrained, the GP will output negative
+IC estimates whenever the data support it.  For industry reversal during a
+momentum regime, the buffer of $(z, y)$ pairs will show a negative slope,
+and the GP will fit a curve that dips below zero---effectively discovering
+that the ``reversal'' signal should be treated as a momentum signal and
+traded in the opposite direction.
+
+\subsection{Kernel Ridge Regression}
+
+Kernel Ridge Regression (KRR)~\cite{ScholkopfSmola2002} solves
+\[
+  \min_{\mathbf{w}} \;\|\mathbf{K}\mathbf{w} - \mathbf{y}\|^2
+    + \alpha\,\mathbf{w}^\top \mathbf{K} \mathbf{w},
+\]
+where $\mathbf{K}_{ij} = k(z_i, z_j)$ is the RBF kernel matrix computed
+over the 120-day buffer.  The ridge penalty $\alpha$ controls the
+bias-variance trade-off; we set $\alpha = 19.0$, matching the
+noise-to-signal ratio.  This is an empirical Bayes choice: the coefficients
+are shrunk toward zero in proportion to the assumed noise level, so the
+predicted IC function is pulled toward a flat zero unless the signal
+provides strong evidence for a non-zero value.
+
+KRR does not provide an analytical predictive variance.  We approximate
+confidence as $\sigma^2 \approx \alpha / 10$, reflecting the idea that
+heavier regularization implies lower confidence, but this heuristic is
+coarser than the GP's exact posterior.  Computationally, KRR requires
+solving an $n \times n$ linear system ($n \leq 120$ in the buffer)
+on every trading day, compared to a Cholesky factorization of the same
+size for GPR; both are negligible in wall-clock time but GPR's $O(n^3)$
+scaling becomes relevant at larger buffer sizes.
+
+Like the GP, KRR's predicted IC is unconstrained in sign, enabling
+automatic signal inversion when the data support it.
+
+\subsection{Walk-Forward Protocol}
+
+On each trading day $t$: (1) update both models with yesterday's
+cross-section of $(z_{i,t-1}, y_{i,t-1})$ pairs, where
+$y_{i,t-1} = r_{i,t}/\sigma_{i,t-1}$ (tomorrow's return is observable
+at the end of day $t$); (2) predict today's IC function and compute
+$\hat{\alpha}_{i,t}$ for every stock in the universe; (3) pass the
+alphas to the optimizer to form day $t$'s portfolio.  The first 120 days
+are used as burn-in; production begins only when the buffer is full.
 
 \subsection{Mean-Variance Optimization}
+\label{sec:mvo}
 
-Given alpha forecasts $\mu_{i,t} = \sigma_{i,t}\,\hat\alpha_{i,t}$ and the Barra factor
-covariance matrix $\Sigma_t$, we solve
+Given alpha forecasts $\mu_{i,t} = \hat{\alpha}_{i,t}$ and the Barra
+factor covariance matrix $\Sigma_t$, we solve
 \[
-  \max_w \;\; w^\top \mu_t - \tfrac{\gamma}{2}\,w^\top \Sigma_t w
+  \max_{w} \;\; w^\top \mu_t - \tfrac{\gamma}{2}\,w^\top \Sigma_t w
   \quad \text{s.t.} \quad
-  w^\top \boldsymbol\beta_{\mathrm{mkt}} = 0, \quad \mathbf{1}^\top w = 0,
+  w^\top \boldsymbol{\beta}_{\mathrm{mkt}} = 0,
+  \quad
+  \mathbf{1}^\top w = 0,
 \]
-with risk aversion $\gamma = 200$.  The constraints enforce market-neutrality (zero-beta) and
-dollar-neutrality (zero-investment).  Forming the Lagrangian
-$\mathcal{L} = w^\top\mu - \frac{\gamma}{2}w^\top\Sigma w - \lambda_1 w^\top\boldsymbol\beta - \lambda_2 \mathbf{1}^\top w$
-and applying the KKT condition $\nabla_w \mathcal{L} = 0$ gives
-\[
-  w^* = \frac{1}{\gamma}\,\Sigma_t^{-1}\!\left(\mu_t - \lambda_1^*\boldsymbol\beta_{\mathrm{mkt}} - \lambda_2^*\mathbf{1}\right),
-\]
-showing the optimal portfolio is the unconstrained maximum-Sharpe allocation $\Sigma_t^{-1}\mu_t$
-projected onto the feasible set.  Multipliers $\lambda_1^*, \lambda_2^*$ are solved analytically
-via a $2\times2$ linear system.  In practice the optimization is handled by CVXPY.
+with risk aversion $\gamma = 200$.  The constraints enforce
+market-neutrality (zero-beta) and dollar-neutrality (zero-investment),
+ensuring that performance is driven by IC skill rather than market-beta
+exposure.  The constrained solution is the unconstrained Markowitz
+allocation $\Sigma_t^{-1}\mu_t$ projected onto the feasible set via a
+$2\times 2$ Lagrange multiplier system; in practice the optimization is
+handled by CVXPY.  For GPR, the per-stock alpha variance
+$\operatorname{Var}[\hat{\alpha}_{i,t}]$ is added to the diagonal of
+$\Sigma_t$, further down-weighting stocks where the IC estimate is
+uncertain.
 
-Walk-forward results over 2010--2024 confirm that dynamic models---particularly the polynomial
-Kalman and binned Kalman---generate higher Sharpe ratios than the static baseline across the
-majority of signal-model pairs, validating the hypothesis that $IC_t(z)$ is non-trivially
-non-constant.
+% TODO: Insert Sharpe ratio comparison table and cumulative return figures
+% once backtest results are available from analyze.py.
 
 %%Fifth Section
 \section{Ethical Implications and Conclusions}
 
 Three ethical concerns arise from deploying dynamic IC models at scale.
 
-\textbf{Crowding and self-defeating feedback.}  If many institutions simultaneously estimate
-$IC_t(z)$ and tilt toward high-$|z|$ assets, correlated demand compresses or reverses the
-very premium being exploited.  The zero-beta and zero-investment constraints limit single-factor
-concentration but do not eliminate cross-model crowding.  Position limits and turnover controls
-are necessary complements.
+\textbf{Crowding and self-defeating feedback.}
+If many institutions simultaneously estimate $IC_t(z)$ and tilt toward
+high-$|z|$ stocks, correlated demand compresses or reverses the very
+premium being exploited.  This risk is amplified by our signal-inversion
+feature: if the market broadly identifies a sign-flip in industry reversal
+and all reverse their positions simultaneously, the resulting crowded trade
+could cause a cascade.  Position limits and turnover controls are necessary
+complements to this framework.
 
-\textbf{Access inequality.}  Constructing these models requires licensed Barra factor
-exposures, daily-frequency data, and significant compute---resources unavailable to retail
-investors.  Widespread institutional adoption could widen the information gap between
-professional and retail participants.
+\textbf{Access inequality.}
+Constructing these models requires licensed Barra factor data, daily-frequency
+returns, and significant compute---resources unavailable to retail investors.
+Widespread institutional adoption could widen the information gap between
+professional and retail market participants, effectively transferring wealth
+from retail to institutional traders at the times when IC is most predictable.
 
-\textbf{Model fragility.}  All five estimators assume a degree of stationarity in the
-$IC_t(z)$ relationship.  Structural breaks (post-2020 rate-regime change, 2022 growth-to-value
-rotation) can cause rapid parameter mis-calibration, potentially generating large drawdowns
-when risk is highest.  Ongoing monitoring for IC collapse and automatic de-risking rules
-are essential safeguards.
+\textbf{Model fragility.}
+Both estimators assume a degree of stationarity in the $IC_t(z)$
+relationship within the 120-day buffer.  Structural breaks---such as the
+post-2020 rate-regime shift or the 2022 growth-to-value rotation---can cause
+rapid parameter mis-calibration.  A model that has learned $IC < 0$ for
+a reversal signal may continue to trade the inverted position long after
+the regime has reverted, generating large drawdowns precisely when volatility
+is highest.  Ongoing monitoring for IC collapse and automatic de-risking
+rules are essential safeguards.
 
-In conclusion, we demonstrate that the conditional IC $IC_t(z)$ is non-constant in both $z$
-and $t$.  Online Kalman and kernel learning methods successfully estimate this structure in a
-walk-forward setting, yielding meaningful improvements in risk-adjusted portfolio performance
-relative to the static Grinold baseline.
+\textbf{Conclusions.}
+We demonstrate that the conditional IC $IC_t(z)$ is non-constant in both
+$z$ and $t$, and that the five structural challenges of equity return
+data---heteroskedasticity, fat tails, tail sparsity, regime change, and
+extreme SNR---can each be addressed, at least partially, through principled
+design choices.  GPR encodes the noise assumption directly in its kernel;
+KRR encodes it in its ridge penalty.  Both can discover that a signal's
+predictive direction has reversed and respond by trading against the
+nominal signal direction---a capability unavailable to any static model.
+Walk-forward results will quantify the practical benefit of these designs
+relative to the static Grinold baseline once the backtest pipeline
+completes.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Bibliography below
@@ -260,8 +403,8 @@ relative to the static Grinold baseline.
 
 \bibitem{GrinoldKahn1999}
   Grinold, R.~C., and Kahn, R.~N.\
-  \emph{Active Portfolio Management: A Quantitative Approach for Producing Superior Returns
-  and Controlling Risk.}
+  \emph{Active Portfolio Management: A Quantitative Approach for Producing
+  Superior Returns and Controlling Risk.}
   McGraw-Hill, 1999.
 
 \bibitem{Clarke2002}
@@ -274,20 +417,26 @@ relative to the static Grinold baseline.
   ``Active Risk and Information Ratio.''
   \emph{Journal of Investment Management}, 2(3):20--34, 2004.
 
+\bibitem{FrazziniPedersen2014}
+  Frazzini, A., and Pedersen, L.~H.\
+  ``Betting Against Beta.''
+  \emph{Journal of Financial Economics}, 111(1):1--23, 2014.
+
+\bibitem{RasmussenWilliams2006}
+  Rasmussen, C.~E., and Williams, C.~K.~I.\
+  \emph{Gaussian Processes for Machine Learning.}
+  MIT Press, 2006.
+
+\bibitem{ScholkopfSmola2002}
+  Sch{\"o}lkopf, B., and Smola, A.~J.\
+  \emph{Learning with Kernels: Support Vector Machines, Regularization,
+  Optimization, and Beyond.}
+  MIT Press, 2002.
+
 \bibitem{Kalman1960}
   Kalman, R.~E.\
   ``A New Approach to Linear Filtering and Prediction Problems.''
   \emph{Journal of Basic Engineering}, 82(1):35--45, 1960.
-
-\bibitem{Nadaraya1964}
-  Nadaraya, E.~A.\
-  ``On Estimating Regression.''
-  \emph{Theory of Probability and its Applications}, 9(1):141--142, 1964.
-
-\bibitem{Watson1964}
-  Watson, G.~S.\
-  ``Smooth Regression Analysis.''
-  \emph{Sankhy\={a}: The Indian Journal of Statistics}, 26(4):359--372, 1964.
 
 \bibitem{Haykin2002}
   Haykin, S.\

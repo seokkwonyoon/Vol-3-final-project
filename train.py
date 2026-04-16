@@ -9,8 +9,8 @@ For each (signal, model) pair:
 The alpha parquet is consumed by mvo.py (Phase 3).
 
 Usage:
-    uv run python train.py --split recent
-    uv run python train.py --split recent --signal style_momentum --model kalman_poly
+    uv run python train.py
+    uv run python train.py --signal style_momentum --model kalman_poly
 """
 import argparse
 import os
@@ -19,30 +19,31 @@ import time
 import polars as pl
 
 from configs import (
-    SPLITS, SIGNALS, SELECTED_SIGNALS, MODELS,
+    SPLITS, SPLIT, SIGNALS, SELECTED_SIGNALS, MODELS,
     z_scores_path, alphas_path,
     LOOKBACK_DAYS,
 )
 from pipeline import DynamicICPipeline
 from models import MODEL_REGISTRY
-from timing import record_elapsed
+from timing import record_elapsed, setup_logging
 
 
 def main():
     parser = argparse.ArgumentParser(description="Walk-forward IC estimation")
-    parser.add_argument("--split", required=True, choices=list(SPLITS.keys()))
     parser.add_argument("--signal", default=None,
                         help="Single signal (default: all signals)")
     parser.add_argument("--model", default=None,
                         help="Single model (default: all models)")
+    parser.add_argument("--config", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    setup_logging("train", signal=args.signal or "all", model=args.model or "all")
 
-    split = SPLITS[args.split]
+    split = SPLITS[SPLIT]
     signals = [args.signal] if args.signal else (SELECTED_SIGNALS or SIGNALS)
     models = [args.model] if args.model else MODELS
     pipe = DynamicICPipeline()
 
-    print(f"Split: {args.split} ({split['start']} → {split['end']})")
+    print(f"Split: {SPLIT} ({split['start']} → {split['end']})")
     print(f"Signals × Models: {len(signals)} × {len(models)} = {len(signals) * len(models)}\n")
 
     print("Loading asset data...", flush=True)
@@ -50,7 +51,7 @@ def main():
     print(f"  {assets.height:,} rows\n")
 
     for sig in signals:
-        z_path = z_scores_path(args.split, sig)
+        z_path = z_scores_path(SPLIT, sig)
         if not os.path.exists(z_path):
             print(f"✗ {sig}: z-score parquet not found at {z_path} — run compute.py first\n")
             continue
@@ -61,7 +62,7 @@ def main():
 
         for mod in models:
             label = f"{sig} / {mod}"
-            a_path = alphas_path(args.split, sig, mod)
+            a_path = alphas_path(SPLIT, sig, mod)
 
             if os.path.exists(a_path):
                 print(f"  Alphas exist, skipping: {label}")
@@ -76,7 +77,7 @@ def main():
             os.makedirs(os.path.dirname(a_path), exist_ok=True)
             alphas.write_parquet(a_path)
             elapsed = time.perf_counter() - t0
-            record_elapsed("train", f"{sig}/{mod}/{args.split}", elapsed)
+            record_elapsed("train", f"{sig}/{mod}/{SPLIT}", elapsed)
             print(f"    ✓ {alphas.height:,} rows → {a_path}  ({elapsed:.0f}s)")
 
         print()

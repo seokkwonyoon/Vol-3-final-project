@@ -7,3 +7,6 @@ MODELS = [
     "gaussian_process_regression",
     "kernel_ridge_regression",
 ]
+
+# no nadaraya-watson so training is quite fast
+SLURM_TIME_TRAIN   = "1:00:00"

@@ -8,8 +8,8 @@ Compares all (signal, model) pairs against each other and produces:
   - Drawdown and rolling Sharpe panels
 
 Usage:
-    uv run python analyze.py --split test
-    uv run python analyze.py --split train --signal style_momentum
+    uv run python analyze.py
+    uv run python analyze.py --signal style_momentum
 """
 import argparse
 import os
@@ -22,11 +22,11 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 from configs import (
-    SPLITS, SIGNALS, SELECTED_SIGNALS, MODELS, weights_dir, split_dir,
+    SPLITS, SPLIT, SIGNALS, SELECTED_SIGNALS, MODELS, weights_dir, split_dir,
     z_scores_path, alphas_path,
 )
 from models import MODEL_REGISTRY
-from timing import record_elapsed
+from timing import record_elapsed, setup_logging
 
 
 # ── Matplotlib style ──────────────────────────────────────────────────────────
@@ -256,15 +256,16 @@ def visualise_ic_function(
 
 def main():
     t0 = time.perf_counter()
+    setup_logging("analyze")
     parser = argparse.ArgumentParser(description="Analyse and visualise backtest results")
-    parser.add_argument("--split", required=True, choices=list(SPLITS.keys()))
     parser.add_argument("--signal", default=None,
                         help="Single signal (default: all available)")
+    parser.add_argument("--config", default=None, help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    split_cfg = SPLITS[args.split]
+    split_cfg = SPLITS[SPLIT]
     signals = [args.signal] if args.signal else (SELECTED_SIGNALS or SIGNALS)
-    out_dir = split_dir(args.split)
+    out_dir = split_dir(SPLIT)
     os.makedirs(out_dir, exist_ok=True)
 
     log_path = os.path.join(out_dir, "backtest_report.txt")
@@ -289,7 +290,7 @@ def main():
 
     set_academic_style()
 
-    print(f"\nBacktest Summary — {args.split}")
+    print(f"\nBacktest Summary — {SPLIT}")
     print(f"{'Strategy':<42} {'Mean%':>8} {'Vol%':>7} {'Sharpe':>8} {'MaxDD%':>8}")
     print("-" * 77)
 
@@ -297,7 +298,7 @@ def main():
 
     for sig in signals:
         for mod in MODELS:
-            pf = load_portfolio_returns(args.split, sig, mod, forward_returns)
+            pf = load_portfolio_returns(SPLIT, sig, mod, forward_returns)
             if pf is None:
                 continue
             rets = pf["return"].fill_null(0.0).to_numpy()
@@ -361,7 +362,7 @@ def main():
                       fontsize=8)
 
         ax_cum.axhline(0, color="black", linewidth=0.8, alpha=0.4)
-        ax_cum.set_title(f"Cumulative Return — {sig} ({args.split})", loc="left")
+        ax_cum.set_title(f"Cumulative Return — {sig} ({SPLIT})", loc="left")
         ax_cum.set_ylabel("Cumulative Log Return (%)")
 
         ax_dd.set_title("Drawdown", loc="left")
@@ -378,15 +379,15 @@ def main():
         print(f"\nChart → {chart_path}")
 
     # ── Portfolio overview chart ──────────────────────────────────────────────
-    visualise_portfolio_overview(ew_portfolio, all_portfolios, signals, args.split, out_dir)
+    visualise_portfolio_overview(ew_portfolio, all_portfolios, signals, SPLIT, out_dir)
 
     # ── IC function evolution ─────────────────────────────────────────────────
     dynamic_models = [m for m in MODELS if m != "static"]
     for sig in signals:
-        visualise_ic_function(args.split, sig, dynamic_models, out_dir)
+        visualise_ic_function(SPLIT, sig, dynamic_models, out_dir)
 
     elapsed = time.perf_counter() - t0
-    record_elapsed("analyze", args.split, elapsed)
+    record_elapsed("analyze", SPLIT, elapsed)
 
     sys.stdout.close()
     sys.stdout = sys.__stdout__

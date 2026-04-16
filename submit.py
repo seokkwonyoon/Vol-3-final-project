@@ -6,7 +6,7 @@ Generates and submits a 4-phase Slurm job chain:
   Phase 1  (job array, 1 task/signal)          compute.py  --signal $SIG
   Phase 2  (job array, 1 task/signal×model)    train.py    --signal $SIG --model $MOD
   Phase 3  (job array, 1 task/signal×model)    mvo.py      --signal $SIG --model $MOD
-  Phase 4  (single job)                        analyze.py  --split $SPLIT
+  Phase 4  (single job)                        analyze.py
 
 Dependency structure:
   Phase 2  afterok:Phase1      (all z-scores must exist before any walk-forward)
@@ -18,10 +18,14 @@ Time limits are set dynamically from logs/timing.json when history exists,
 falling back to config defaults on the first run.  Run timing.py to inspect
 the current estimates.
 
+Split and signal selection are read from configs/default.py (SPLIT, SELECTED_SIGNALS).
+Pass --config to override with a different config file.
+
 Usage:
-    uv run python submit.py --split recent
-    uv run python submit.py --split recent --dry-run        # print scripts, no submission
-    uv run python submit.py --split recent --signal style_momentum --model static
+    uv run python submit.py
+    uv run python submit.py --dry-run                   # print scripts, no submission
+    uv run python submit.py --config configs/test.py    # use a custom config
+    uv run python submit.py --model static
 """
 import argparse
 import os
@@ -31,7 +35,7 @@ import tempfile
 import textwrap
 
 from configs import (
-    SIGNALS, MODELS, SPLITS, BYU_EMAIL, PROJECT_ROOT,
+    SIGNALS, SELECTED_SIGNALS, MODELS, SPLITS, SPLIT, BYU_EMAIL, PROJECT_ROOT,
     SLURM_TIME_COMPUTE, SLURM_CPUS_COMPUTE, SLURM_MEM_COMPUTE,
     SLURM_TIME_TRAIN,   SLURM_CPUS_TRAIN,   SLURM_MEM_TRAIN,
     SLURM_TIME_MVO,     SLURM_CPUS_MVO,     SLURM_MEM_MVO,
@@ -141,8 +145,10 @@ def _phase4_time(split: str) -> str:
 
 # ── Phase script generators ───────────────────────────────────────────────────
 
-def phase1_script(split: str, signals: list[str], time_limit: str) -> str:
+def phase1_script(split: str, signals: list[str], time_limit: str,
+                  config: str | None = None) -> str:
     sigs_bash = " ".join(f'"{s}"' for s in signals)
+    cfg = f" --config {config}" if config else ""
     header = _header(
         job_name=f"dic_compute_{split}",
         log_prefix="compute",
@@ -155,15 +161,16 @@ def phase1_script(split: str, signals: list[str], time_limit: str) -> str:
         SIG="${{SIGNALS[$SLURM_ARRAY_TASK_ID]}}"
 
         echo "Phase 1 | split={split} | signal=$SIG"
-        uv run python compute.py --split {split} --signal "$SIG"
+        uv run python compute.py --signal "$SIG"{cfg}
     """)
     return header + body
 
 
 def phase2_script(split: str, pairs: list[tuple[str, str]], dep_id: str,
-                  time_limit: str) -> str:
+                  time_limit: str, config: str | None = None) -> str:
     sigs_bash = " ".join(f'"{s}"' for s, _ in pairs)
     mods_bash = " ".join(f'"{m}"' for _, m in pairs)
+    cfg = f" --config {config}" if config else ""
     header = _header(
         job_name=f"dic_train_{split}",
         log_prefix="train",
@@ -179,15 +186,16 @@ def phase2_script(split: str, pairs: list[tuple[str, str]], dep_id: str,
         MOD="${{MODELS[$SLURM_ARRAY_TASK_ID]}}"
 
         echo "Phase 2 | split={split} | signal=$SIG | model=$MOD"
-        uv run python train.py --split {split} --signal "$SIG" --model "$MOD"
+        uv run python train.py --signal "$SIG" --model "$MOD"{cfg}
     """)
     return header + body
 
 
 def phase3_script(split: str, pairs: list[tuple[str, str]], dep_id: str,
-                  time_limit: str) -> str:
+                  time_limit: str, config: str | None = None) -> str:
     sigs_bash = " ".join(f'"{s}"' for s, _ in pairs)
     mods_bash = " ".join(f'"{m}"' for _, m in pairs)
+    cfg = f" --config {config}" if config else ""
     header = _header(
         job_name=f"dic_mvo_{split}",
         log_prefix="mvo",
@@ -205,12 +213,14 @@ def phase3_script(split: str, pairs: list[tuple[str, str]], dep_id: str,
         MOD="${{MODELS[$SLURM_ARRAY_TASK_ID]}}"
 
         echo "Phase 3 | split={split} | signal=$SIG | model=$MOD"
-        uv run python mvo.py --split {split} --signal "$SIG" --model "$MOD"
+        uv run python mvo.py --signal "$SIG" --model "$MOD"{cfg}
     """)
     return header + body
 
 
-def phase4_script(split: str, dep_id: str, time_limit: str) -> str:
+def phase4_script(split: str, dep_id: str, time_limit: str,
+                  config: str | None = None) -> str:
+    cfg = f" --config {config}" if config else ""
     header = _header(
         job_name=f"dic_analyze_{split}",
         log_prefix="analyze",
@@ -220,7 +230,7 @@ def phase4_script(split: str, dep_id: str, time_limit: str) -> str:
     )
     body = textwrap.dedent(f"""\
         echo "Phase 4 | split={split} | analysis"
-        uv run python analyze.py --split {split}
+        uv run python analyze.py{cfg}
     """)
     return header + body
 
@@ -233,27 +243,30 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
-              uv run python submit.py --split recent
-              uv run python submit.py --split recent --dry-run
-              uv run python submit.py --split recent --signal style_momentum --model static
+              uv run python submit.py
+              uv run python submit.py --dry-run
+              uv run python submit.py --config configs/test.py
+              uv run python submit.py --model static
+
+            Split and signals are configured in configs/default.py (SPLIT, SELECTED_SIGNALS).
+            Pass --config to override with a different config file.
 
             To inspect estimated time limits from past runs:
               uv run python timing.py
         """),
     )
-    parser.add_argument("--split", required=True, choices=list(SPLITS.keys()))
-    parser.add_argument("--signal", default=None,
-                        help="Restrict to a single signal (default: all)")
+    parser.add_argument("--config", default=None,
+                        help="Config file to use (default: configs/default.py)")
     parser.add_argument("--model", default=None,
                         help="Restrict to a single model (default: all)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print generated scripts without submitting")
     args = parser.parse_args()
 
-    signals = [args.signal] if args.signal else SIGNALS
-    models  = [args.model]  if args.model  else MODELS
+    signals = SELECTED_SIGNALS or SIGNALS
+    models  = [args.model] if args.model else MODELS
     pairs   = [(s, m) for s in signals for m in models]
-    split   = args.split
+    split   = SPLIT
 
     os.makedirs(f"{PROJECT_ROOT}/logs", exist_ok=True)
 
@@ -269,19 +282,21 @@ def main():
     if args.dry_run:
         print("(dry-run — scripts will be printed, nothing submitted)\n")
 
-    s1  = phase1_script(split, signals, t1)
+    cfg = args.config
+
+    s1  = phase1_script(split, signals, t1, cfg)
     jid1 = sbatch_submit(s1, args.dry_run)
     print(f"Phase 1 submitted: job {jid1}  ({len(signals)}-task array)  compute   [{t1}]")
 
-    s2  = phase2_script(split, pairs, jid1, t2)
+    s2  = phase2_script(split, pairs, jid1, t2, cfg)
     jid2 = sbatch_submit(s2, args.dry_run)
     print(f"Phase 2 submitted: job {jid2}  ({len(pairs)}-task array)   train     [{t2}]  [afterok:{jid1}]")
 
-    s3  = phase3_script(split, pairs, jid2, t3)
+    s3  = phase3_script(split, pairs, jid2, t3, cfg)
     jid3 = sbatch_submit(s3, args.dry_run)
     print(f"Phase 3 submitted: job {jid3}  ({len(pairs)}-task array)   mvo       [{t3}]  [aftercorr:{jid2}]")
 
-    s4  = phase4_script(split, jid3, t4)
+    s4  = phase4_script(split, jid3, t4, cfg)
     jid4 = sbatch_submit(s4, args.dry_run)
     print(f"Phase 4 submitted: job {jid4}  (single job)               analyze   [{t4}]  [afterok:{jid3}]")
 

@@ -52,17 +52,17 @@ Phase 4  single job      analyze.py   for the split        4 CPU / 32G / 15 min
 ```
 
 ```bash
-uv run python submit.py --split recent           # submit everything
-uv run python submit.py --split recent --dry-run # print scripts without submitting
+uv run python submit.py           # submit everything
+uv run python submit.py --dry-run # print scripts without submitting
 ```
 
 ### Running steps manually
 
 ```bash
-uv run python compute.py --split recent --signal style_momentum
-uv run python train.py   --split recent --signal style_momentum --model kalman_poly
-uv run python mvo.py     --split recent --signal style_momentum --model kalman_poly
-uv run python analyze.py --split recent
+uv run python compute.py --signal style_momentum
+uv run python train.py   --signal style_momentum --model kalman_poly
+uv run python mvo.py     --signal style_momentum --model kalman_poly
+uv run python analyze.py
 ```
 
 ## Signals
@@ -99,8 +99,11 @@ alpha_z, variance = model.predict(z)  # alpha_z = IC(z) × z
 | `gaussian_process_regression` | Bayesian GPR with RBF + white noise kernel |
 | `kernel_ridge_regression` | Kernel ridge regression over a rolling buffer |
 
-### Adding a new model
+### Adding a new signal or model
 
+For a new signal: create `signals/my_signal.py` and add its name to `SIGNALS` in `configs/default.py`.
+
+For a new model:
 1. Create `models/my_model.py` implementing `ICModel` from `models/base.py`.
 2. Register it in `models/__init__.py`.
 3. Add its key to `MODELS` in `configs/default.py`.
@@ -147,6 +150,8 @@ All tuneable parameters live in `configs/default.py`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `SPLIT` | `"recent"` | Active date split: `"full"`, `"recent"`, or `"test"` |
+| `SELECTED_SIGNALS` | `None` | Signals to run (None = all signals) |
 | `STATIC_IC` | 0.05 | Fixed IC for the static baseline |
 | `GAMMA` | 200 | MVO risk-aversion parameter |
 | `LOOKBACK_DAYS` | 120 | Rolling window fed to IC models (trading days) |

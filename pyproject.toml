@@ -9,6 +9,7 @@ dependencies = [
     "numpy>=2.4.4",
     "polars>=1.0.0",
     "pyarrow>=23.0.0",
+    "scikit-learn>=1.8.0",
     "sf-backtester",
     "sf-quant>=0.2.6",
 ]

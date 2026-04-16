@@ -18,9 +18,63 @@ config default so the first run is always safe.
 """
 import json
 import os
+import sys
+from datetime import datetime
 from pathlib import Path
 
 _TIMING_PATH = Path(__file__).parent / "logs" / "timing.json"
+_LOGS_DIR    = Path(__file__).parent / "logs"
+
+
+# ── Run logging ───────────────────────────────────────────────────────────────
+
+def setup_logging(phase: str, **tags: str) -> Path:
+    """
+    Tee stdout and stderr to a timestamped log file for this phase.
+
+    Call once at the top of main() in each pipeline script.  All print()
+    output and Python tracebacks will appear on the terminal *and* in the
+    log file, so crashes are captured without any extra steps.
+
+    Parameters
+    ----------
+    phase : str
+        One of "compute", "train", "mvo", "analyze", "submit".
+    **tags : str
+        Optional key-value pairs added to the filename, e.g.
+        signal="style_momentum", model="kalman_poly".
+
+    Returns
+    -------
+    Path
+        Path to the log file that was opened.
+    """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    parts = [ts] + [str(v) for v in tags.values() if v is not None]
+    log_dir = _LOGS_DIR / phase
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / ("_".join(parts) + ".log")
+
+    _f = open(log_path, "w", buffering=1)
+
+    class _Tee:
+        def __init__(self, stream):
+            self._stream = stream
+        def write(self, msg):
+            self._stream.write(msg)
+            _f.write(msg)
+            return len(msg)
+        def flush(self):
+            self._stream.flush()
+            _f.flush()
+        def __getattr__(self, name):
+            return getattr(self._stream, name)
+
+    sys.stdout = _Tee(sys.stdout)
+    sys.stderr = _Tee(sys.stderr)
+
+    print(f"[log] {log_path}")
+    return log_path
 _MAX_HISTORY = 10     # observations kept per key
 _BUFFER      = 2.0    # multiply observed max by this factor
 
