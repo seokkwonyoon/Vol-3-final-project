@@ -6,7 +6,7 @@ factors, then mapped to asset level via Barra exposures.
 """
 import datetime as dt
 import polars as pl
-from config import FACTORS_PATH, EXPOSURES_PATH
+from configs import FACTORS_PATH, EXPOSURES_PATH
 
 
 def compute_factor_signal(

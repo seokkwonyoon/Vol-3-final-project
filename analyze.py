@@ -19,9 +19,10 @@ import time
 import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
-from config import (
-    SPLITS, SIGNALS, MODELS, weights_dir, split_dir,
+from configs import (
+    SPLITS, SIGNALS, SELECTED_SIGNALS, MODELS, weights_dir, split_dir,
     z_scores_path, alphas_path,
 )
 from models import MODEL_REGISTRY
@@ -87,6 +88,88 @@ def load_portfolio_returns(
         .sort("date")
         .with_columns(pl.lit(f"{sig}/{mod}").alias("name"))
     )
+
+
+def compute_equal_weighted_portfolio(portfolios: list[pl.DataFrame]) -> pl.DataFrame:
+    """Average daily returns across all signal/model portfolios (equal-weight).
+
+    Returns a DataFrame with schema: date: Date, return: Float64.
+    Uses the mean of however many portfolios are active on each date, so
+    incomplete coverage days are handled naturally without zero-padding.
+    """
+    return (
+        pl.concat([p.select(["date", "return"]) for p in portfolios])
+        .group_by("date")
+        .agg(pl.col("return").mean())
+        .sort("date")
+    )
+
+
+def visualise_portfolio_overview(
+    ew_portfolio: pl.DataFrame,
+    all_portfolios: list[pl.DataFrame],
+    signals: list[str],
+    split: str,
+    out_dir: str,
+):
+    """Fan chart: all signal/model lines (thin, by signal color) + EW aggregate (bold black)."""
+    signal_colors = plt.cm.tab10(np.linspace(0, 1.0, len(signals)))
+    sig_color_map = dict(zip(signals, signal_colors))
+
+    fig, axes = plt.subplots(3, 1, figsize=(13, 11),
+                             gridspec_kw={"height_ratios": [2, 1, 1]})
+    ax_cum, ax_dd, ax_sharpe = axes
+
+    for pf in all_portfolios:
+        sig = pf["name"][0].split("/")[0]
+        color = sig_color_map.get(sig, "gray")
+        pf_pd = pf.sort("date").to_pandas().set_index("date")
+        rets = pf_pd["return"].fillna(0.0)
+        cum = np.log1p(rets).cumsum() * 100
+        rolling_m = rets.rolling(252).mean() * 252 * 100
+        rolling_v = rets.rolling(252).std() * np.sqrt(252) * 100
+        rolling_s = rolling_m / rolling_v.replace(0, np.nan)
+        ax_cum.plot(pf_pd.index, cum, color=color, alpha=0.18, linewidth=0.7)
+        ax_dd.plot(pf_pd.index, cum - cum.cummax(), color=color, alpha=0.18, linewidth=0.7)
+        ax_sharpe.plot(pf_pd.index, rolling_s, color=color, alpha=0.18, linewidth=0.7)
+
+    ew_pd = ew_portfolio.sort("date").to_pandas().set_index("date")
+    ew_rets = ew_pd["return"].fillna(0.0)
+    ew_cum = np.log1p(ew_rets).cumsum() * 100
+    ew_rolling_m = ew_rets.rolling(252).mean() * 252 * 100
+    ew_rolling_v = ew_rets.rolling(252).std() * np.sqrt(252) * 100
+    ew_rolling_s = ew_rolling_m / ew_rolling_v.replace(0, np.nan)
+
+    ax_cum.plot(ew_pd.index, ew_cum, color="black", linewidth=2.0, zorder=5)
+    ax_dd.plot(ew_pd.index, ew_cum - ew_cum.cummax(), color="black", linewidth=2.0, zorder=5)
+    ax_sharpe.plot(ew_pd.index, ew_rolling_s, color="black", linewidth=2.0, zorder=5)
+
+    legend_handles = [
+        Line2D([0], [0], color=sig_color_map[s], linewidth=1.5, label=s)
+        for s in signals if s in sig_color_map
+    ] + [Line2D([0], [0], color="black", linewidth=2.0, label="EW Portfolio")]
+
+    for ax in axes:
+        ax.yaxis.grid(True)
+
+    ax_cum.axhline(0, color="black", linewidth=0.8, alpha=0.4)
+    ax_cum.set_title(f"Portfolio Overview — Equal-Weighted ({split})", loc="left")
+    ax_cum.set_ylabel("Cumulative Log Return (%)")
+    ax_cum.legend(handles=legend_handles, loc="upper left",
+                  bbox_to_anchor=(1.02, 1), borderaxespad=0, fontsize=8)
+
+    ax_dd.set_title("Drawdown", loc="left")
+    ax_dd.set_ylabel("Drawdown (%)")
+
+    ax_sharpe.axhline(0, color="black", linewidth=0.8, alpha=0.4)
+    ax_sharpe.set_title("Rolling 1-Year Sharpe", loc="left")
+    ax_sharpe.set_ylabel("Sharpe Ratio")
+
+    plt.tight_layout()
+    chart_path = os.path.join(out_dir, "portfolio_overview.png")
+    plt.savefig(chart_path)
+    plt.close()
+    print(f"\nPortfolio overview → {chart_path}")
 
 
 def compute_stats(returns: np.ndarray) -> dict:
@@ -180,7 +263,7 @@ def main():
     args = parser.parse_args()
 
     split_cfg = SPLITS[args.split]
-    signals = [args.signal] if args.signal else SIGNALS
+    signals = [args.signal] if args.signal else (SELECTED_SIGNALS or SIGNALS)
     out_dir = split_dir(args.split)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -227,6 +310,16 @@ def main():
             )
             all_portfolios.append(pf)
 
+    # ── Equal-weighted portfolio summary ──────────────────────────────────────
+    if all_portfolios:
+        ew_portfolio = compute_equal_weighted_portfolio(all_portfolios)
+        ew_rets = ew_portfolio["return"].fill_null(0.0).to_numpy()
+        ew_stats = compute_stats(ew_rets)
+        print(
+            f"{'EQUAL-WEIGHTED PORTFOLIO':<42} {ew_stats['mean_ann']:>7.2f}  "
+            f"{ew_stats['vol_ann']:>6.2f}  {ew_stats['sharpe']:>7.3f}  "
+            f"{ew_stats['max_dd']:>7.2f}"
+        )
     print("-" * 77)
 
     if not all_portfolios:
@@ -283,6 +376,9 @@ def main():
         plt.savefig(chart_path)
         plt.close()
         print(f"\nChart → {chart_path}")
+
+    # ── Portfolio overview chart ──────────────────────────────────────────────
+    visualise_portfolio_overview(ew_portfolio, all_portfolios, signals, args.split, out_dir)
 
     # ── IC function evolution ─────────────────────────────────────────────────
     dynamic_models = [m for m in MODELS if m != "static"]

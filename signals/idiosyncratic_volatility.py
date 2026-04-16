@@ -7,7 +7,7 @@ higher risk-adjusted returns (low-volatility anomaly / BAV).
 """
 import datetime as dt
 import polars as pl
-from config import MIN_PRICE
+from configs import MIN_PRICE
 from signals._asset_signal import ASSETS_PATH
 
 

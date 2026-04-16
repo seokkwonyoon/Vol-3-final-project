@@ -6,7 +6,7 @@ Recent idiosyncratic winners expected to mean-revert.
 """
 import datetime as dt
 import polars as pl
-from config import REVERSAL_WINDOW, MIN_PRICE
+from configs import REVERSAL_WINDOW, MIN_PRICE
 from signals._asset_signal import load_specific_returns, rolling_vol_scaled
 
 

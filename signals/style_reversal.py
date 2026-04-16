@@ -6,7 +6,7 @@ negated: recent winners in factor space are expected to mean-revert.
 """
 import datetime as dt
 import polars as pl
-from config import STYLE_FACTORS, REVERSAL_WINDOW
+from configs import STYLE_FACTORS, REVERSAL_WINDOW
 from signals._factor_signal import compute_factor_signal
 
 

@@ -13,7 +13,7 @@ import argparse
 import os
 import time
 
-from config import SPLITS, SIGNALS, z_scores_path
+from configs import SPLITS, SIGNALS, SELECTED_SIGNALS, z_scores_path
 from pipeline import DynamicICPipeline
 from timing import record_elapsed
 
@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
 
     split = SPLITS[args.split]
-    signals = [args.signal] if args.signal else SIGNALS
+    signals = [args.signal] if args.signal else (SELECTED_SIGNALS or SIGNALS)
     pipe = DynamicICPipeline()
 
     print(f"Split: {args.split} ({split['start']} → {split['end']})")

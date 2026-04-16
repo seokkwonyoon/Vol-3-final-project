@@ -17,7 +17,7 @@ import time
 import polars as pl
 from sf_quant.backtester import backtest_parallel
 
-from config import (
+from configs import (
     SPLITS, SIGNALS, MODELS, GAMMA, CONSTRAINTS,
     alphas_path, weights_dir,
 )

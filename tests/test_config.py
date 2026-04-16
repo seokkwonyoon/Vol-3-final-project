@@ -2,9 +2,13 @@
 Sanity checks for config.py — values, path helpers, and consistency.
 """
 import datetime as dt
+import importlib
+import sys
+from pathlib import Path
+
 import pytest
 
-from config import (
+from configs import (
     SPLITS, SIGNALS, MODELS, STATIC_IC, GAMMA, LOOKBACK_DAYS,
     MOMENTUM_WINDOW, MOMENTUM_SKIP, REVERSAL_WINDOW, MIN_PRICE,
     STYLE_FACTORS, INDUSTRY_FACTORS,
@@ -113,6 +117,39 @@ class TestPathHelpers:
         assert "style_momentum" in path
         assert "kalman_poly" in path
         assert path.endswith(".parquet")
+
+
+def test_config_can_load_from_configs_path(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    monkeypatch.setattr(sys, "argv", ["pytest", "--config", "configs/test.py"])
+    import configs
+    importlib.reload(configs)
+
+    assert configs.CONFIG_NAME == "test"
+    assert configs.SIGNALS == ["style_momentum"]
+    assert configs.MODELS == [
+        "static",
+        "gaussian_process_regression",
+        "kernel_ridge_regression",
+    ]
+    assert list(configs.SPLITS.keys()) == ["smoke"]
+
+
+def test_config_can_load_from_relative_path(monkeypatch):
+    repo_root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(repo_root)
+    monkeypatch.setattr(sys, "argv", ["pytest", "--config", "test.py"])
+    import configs
+    importlib.reload(configs)
+
+    assert configs.CONFIG_NAME == "test"
+    assert configs.SIGNALS == ["style_momentum"]
+    assert configs.MODELS == [
+        "static",
+        "gaussian_process_regression",
+        "kernel_ridge_regression",
+    ]
 
     def test_weights_dir_contains_gamma(self):
         path = weights_dir("test", "style_momentum", "static")

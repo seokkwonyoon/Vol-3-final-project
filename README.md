@@ -27,7 +27,7 @@ The pipeline runs in four sequential phases, each depending on the previous:
 Phase 1: compute.py   z-score each signal cross-sectionally, cache to parquet
 Phase 2: train.py     walk-forward IC estimation → alpha parquets (one per pair)
 Phase 3: mvo.py       mean-variance optimization → portfolio weights (one per pair)
-Phase 4: analyze.py   performance charts, IC function evolution, summary report
+Phase 4: analyze.py   performance charts, IC function evolution, portfolio overview, summary report
 ```
 
 **Phase 2 is the core.** For each (signal, model) pair it steps through every
@@ -82,7 +82,7 @@ Eight signals, each pre-computed as a cross-sectional z-score across the univers
 
 ## IC Models
 
-Five models in `models/`, all sharing the same interface:
+Seven models in `models/`, all sharing the same interface:
 
 ```python
 model.update(z, y)               # y = r / σ  (risk-normalised return)
@@ -96,12 +96,14 @@ alpha_z, variance = model.predict(z)  # alpha_z = IC(z) × z
 | `rbf_rls` | 7 Gaussian basis functions fit by recursive least squares with forgetting |
 | `binned_kalman` | 15 independent Kalman filters, one per z-score bin |
 | `nadaraya_watson` | Rolling kernel regression: spatial × temporal weights over a 120-day buffer |
+| `gaussian_process_regression` | Bayesian GPR with RBF + white noise kernel |
+| `kernel_ridge_regression` | Kernel ridge regression over a rolling buffer |
 
 ### Adding a new model
 
 1. Create `models/my_model.py` implementing `ICModel` from `models/base.py`.
 2. Register it in `models/__init__.py`.
-3. Add its key to `MODELS` in `config.py`.
+3. Add its key to `MODELS` in `configs/default.py`.
 
 ## Project Structure
 
@@ -111,16 +113,19 @@ dynamic_ic/
 ├── compute.py              # Phase 1: compute and cache z-score parquets
 ├── train.py                # Phase 2: walk-forward IC estimation → alpha parquets
 ├── mvo.py                  # Phase 3: mean-variance optimization → weight parquets
-├── analyze.py              # Phase 4: charts, summary table, IC visualisation
+├── analyze.py              # Phase 4: charts, portfolio overview, IC visualisation, summary table
 ├── pipeline.py             # DynamicICPipeline: z-scores + walk-forward logic
-├── config.py               # All parameters, splits, signal names, paths
+├── configs/                # All parameters, splits, signal names, paths
+│   └── default.py
 ├── models/
 │   ├── base.py             # ICModel ABC
 │   ├── static.py
 │   ├── kalman_poly.py
 │   ├── rbf_rls.py
 │   ├── binned_kalman.py
-│   └── nadaraya_watson.py
+│   ├── nadaraya_watson.py
+│   ├── gaussian_process_regression.py
+│   └── kernel_ridge_regression.py
 ├── signals/
 │   ├── _factor_signal.py   # shared helper: factor returns → asset z-score
 │   ├── _asset_signal.py    # shared helper: asset parquet loaders
@@ -132,12 +137,13 @@ dynamic_ic/
         ├── weights/{signal}/{model}/{gamma}/{year}.parquet
         ├── performance_{signal}.png
         ├── ic_function_{signal}.png
+        ├── portfolio_overview.png
         └── backtest_report.txt
 ```
 
 ## Configuration
 
-All tuneable parameters live in `config.py`:
+All tuneable parameters live in `configs/default.py`:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|

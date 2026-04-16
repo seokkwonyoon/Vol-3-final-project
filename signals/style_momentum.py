@@ -6,7 +6,7 @@ mapped to assets via factor exposures.
 """
 import datetime as dt
 import polars as pl
-from config import STYLE_FACTORS, MOMENTUM_WINDOW, MOMENTUM_SKIP
+from configs import STYLE_FACTORS, MOMENTUM_WINDOW, MOMENTUM_SKIP
 from signals._factor_signal import compute_factor_signal
 
 

@@ -147,7 +147,7 @@ class TestRunWalkforward:
         result = self.pipe.run_walkforward(self.z_scores, self.assets, model)
 
         # Spot-check: alpha = (specific_risk/100) * STATIC_IC * z_score
-        from config import STATIC_IC
+        from configs import STATIC_IC
         sample = result.join(
             self.z_scores, on=["date", "barrid"], how="inner"
         ).join(

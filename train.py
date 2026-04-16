@@ -18,8 +18,8 @@ import time
 
 import polars as pl
 
-from config import (
-    SPLITS, SIGNALS, MODELS,
+from configs import (
+    SPLITS, SIGNALS, SELECTED_SIGNALS, MODELS,
     z_scores_path, alphas_path,
     LOOKBACK_DAYS,
 )
@@ -38,7 +38,7 @@ def main():
     args = parser.parse_args()
 
     split = SPLITS[args.split]
-    signals = [args.signal] if args.signal else SIGNALS
+    signals = [args.signal] if args.signal else (SELECTED_SIGNALS or SIGNALS)
     models = [args.model] if args.model else MODELS
     pipe = DynamicICPipeline()
 

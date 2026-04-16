@@ -15,6 +15,14 @@ STATIC_IC = 0.05             # Baseline IC for the static benchmark
 GAMMA = 200                  # Risk-aversion for MVO
 LOOKBACK_DAYS = 120          # Rolling window fed to IC models (trading days)
 
+# ── Signal-to-Noise Ratio (SNR) ──────────────────────────────────────────────
+# Used to tune ML models for low-SNR environments.
+# Signal Proportion = SNR / (1 + SNR)  =>  1 - Signal Proportion = Noise Proportion
+SNR = 0.05                   # 5% signal, 95% noise
+NOISE_PROPORTION = 1.0 - (SNR / (1.0 + SNR))  # ~0.95 for SNR=0.05
+SIGNAL_PROPORTION = SNR / (1.0 + SNR)          # ~0.05 for SNR=0.05
+NOISE_TO_SIGNAL_RATIO = NOISE_PROPORTION / SIGNAL_PROPORTION  # ~19.0
+
 # Window parameters shared with momentum signals
 MOMENTUM_WINDOW = 231        # 11-to-1 month lookback
 MOMENTUM_SKIP = 21           # Skip most recent month
@@ -55,6 +63,9 @@ SIGNALS = [
     "betting_against_beta",
 ]
 
+# Subset of signals to train on (set to None to use all signals)
+SELECTED_SIGNALS = None  # or e.g., ["style_momentum", "industry_momentum"]
+
 # ── Available IC models ──────────────────────────────────────────────────────
 MODELS = [
     "static",
@@ -62,6 +73,8 @@ MODELS = [
     "rbf_rls",
     "binned_kalman",
     "nadaraya_watson",
+    "gaussian_process_regression",
+    "kernel_ridge_regression",
 ]
 
 # ── Backtest constraints ─────────────────────────────────────────────────────

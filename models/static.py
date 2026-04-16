@@ -5,7 +5,7 @@ alpha_z = STATIC_IC * z
 """
 import numpy as np
 from models.base import ICModel
-from config import STATIC_IC
+from configs import STATIC_IC
 
 
 class StaticIC(ICModel):

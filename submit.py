@@ -30,7 +30,7 @@ import sys
 import tempfile
 import textwrap
 
-from config import (
+from configs import (
     SIGNALS, MODELS, SPLITS, BYU_EMAIL, PROJECT_ROOT,
     SLURM_TIME_COMPUTE, SLURM_CPUS_COMPUTE, SLURM_MEM_COMPUTE,
     SLURM_TIME_TRAIN,   SLURM_CPUS_TRAIN,   SLURM_MEM_TRAIN,

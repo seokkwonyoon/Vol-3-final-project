@@ -6,7 +6,7 @@ Identical methodology to style_momentum but uses INDUSTRY_FACTORS.
 import datetime as dt
 import polars as pl
 
-from config import (
+from configs import (
     FACTORS_PATH, EXPOSURES_PATH, INDUSTRY_FACTORS,
     MOMENTUM_WINDOW, MOMENTUM_SKIP,
 )

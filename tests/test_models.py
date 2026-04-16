@@ -8,7 +8,7 @@ import pytest
 
 from models import MODEL_REGISTRY, StaticIC, KalmanPolyIC, RbfRlsIC, BinnedKalmanIC, NadarayaWatsonIC
 from models.base import ICModel
-from config import STATIC_IC
+from configs import STATIC_IC
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

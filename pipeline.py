@@ -6,7 +6,7 @@ import datetime as dt
 import numpy as np
 import polars as pl
 
-from config import (
+from configs import (
     SPLITS, MIN_PRICE, LOOKBACK_DAYS,
 )
 from signals._asset_signal import ASSETS_PATH
@@ -45,24 +45,41 @@ class DynamicICPipeline:
 
     def cross_sectional_zscore(self, df: pl.DataFrame) -> pl.DataFrame:
         """
-        Given DataFrame[date, barrid, raw_signal], compute the cross-sectional
-        z-score of raw_signal across all stocks on each date.
+        Given DataFrame[date, barrid, raw_signal], apply cross-sectional
+        winsorization (cap at 1st and 99th percentiles) and compute the
+        cross-sectional z-score of the winsorized signal across all stocks
+        on each date.
+
+        Winsorization step: caps extreme outliers at 1st and 99th percentiles
+        to prevent them from inflating the standard deviation.
 
         Returns DataFrame[date, barrid, z_score].
         """
         return (
             df.with_columns([
-                pl.col("raw_signal").mean().over("date").alias("_cs_mean"),
-                pl.col("raw_signal").std().over("date").alias("_cs_std"),
+                # Compute 1st and 99th percentiles per date
+                pl.col("raw_signal").quantile(0.01).over("date").alias("_p1"),
+                pl.col("raw_signal").quantile(0.99).over("date").alias("_p99"),
             ])
             .with_columns(
-                ((pl.col("raw_signal") - pl.col("_cs_mean")) / pl.col("_cs_std"))
+                # Winsorize: clip to [p1, p99]
+                pl.col("raw_signal")
+                .clip(pl.col("_p1"), pl.col("_p99"))
+                .alias("_winsorized")
+            )
+            .with_columns([
+                # Compute z-score on winsorized signal
+                pl.col("_winsorized").mean().over("date").alias("_cs_mean"),
+                pl.col("_winsorized").std().over("date").alias("_cs_std"),
+            ])
+            .with_columns(
+                ((pl.col("_winsorized") - pl.col("_cs_mean")) / pl.col("_cs_std"))
                 .clip(-3.0, 3.0)
                 .fill_nan(0.0)
                 .fill_null(0.0)
                 .alias("z_score")
             )
-            .drop(["_cs_mean", "_cs_std", "raw_signal"])
+            .drop(["_p1", "_p99", "_winsorized", "_cs_mean", "_cs_std", "raw_signal"])
         )
 
     def compute_zscores(self, signal_name: str, start: dt.date, end: dt.date) -> pl.DataFrame:

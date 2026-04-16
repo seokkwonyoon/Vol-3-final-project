@@ -6,7 +6,7 @@ with a 231-day window, skipping the most recent 21 days.
 """
 import datetime as dt
 import polars as pl
-from config import MOMENTUM_WINDOW, MOMENTUM_SKIP, MIN_PRICE
+from configs import MOMENTUM_WINDOW, MOMENTUM_SKIP, MIN_PRICE
 from signals._asset_signal import load_specific_returns, rolling_vol_scaled
 
 
