@@ -1,0 +1,287 @@
+\documentclass[aspectratio=169, 11pt]{beamer}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+\usefonttheme{professionalfonts}
+
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+\definecolor{darkblue}{RGB}{0,51,102}
+
+\setbeamercolor{frametitle}{bg=darkblue, fg=white}
+\setbeamercolor{title}{fg=darkblue}
+\setbeamercolor{structure}{fg=darkblue}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+
+\newcommand{\IC}{\mathrm{IC}}
+\newcommand{\SNR}{\mathrm{SNR}}
+\newcommand{\GP}{\mathcal{GP}}
+\newcommand{\Nrm}{\mathcal{N}}
+\newcommand{\Hk}{\mathcal{H}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+
+\title{Modeling the Dynamic Conditional Information Coefficient}
+\subtitle{Kernel Methods for Equity Return Prediction in Low-SNR Environments}
+\author{Conner B.\ Draper \and Seokkwon Yoon}
+\date{Math 402/436}
+
+\begin{document}
+
+% ── 1. TITLE ──────────────────────────────────────────────────────────────────
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ── 2. INTRODUCTION ───────────────────────────────────────────────────────────
+\begin{frame}{Introduction: The Prediction Problem}
+  \textbf{Setup.}
+  A \textbf{return} is the daily percent change in a stock's price:
+  $r_{i,t} = (P_{i,t} - P_{i,t-1})/P_{i,t-1}$.
+  A \textbf{signal} $z_{i,t}$ is a quantitative predictor (cross-sectionally z-scored).
+  We want to estimate $\E[r_{i,t+1} \mid z_{i,t}]$ to build a long-short portfolio.
+
+  \medskip
+  \textbf{Classical answer (Grinold \& Kahn, 1999).}
+  If $(z, r/\sigma)$ is bivariate normal with correlation $\IC$, conditioning gives:
+  \[
+    \underbrace{\E[r_{i,t+1} \mid z_{i,t}]}_{\text{alpha}} = \IC \cdot \sigma_{i,t} \cdot z_{i,t},
+  \]
+  where $\sigma_{i,t}$ is predicted idiosyncratic volatility and $\IC \approx 0.05$ is treated as a constant.
+
+  \medskip
+  \textbf{Our question.}
+  Does $\IC$ vary with signal strength $z$ and over time $t$?
+  Can we estimate $\IC_t(z)$ to improve on the static baseline?
+
+  \medskip
+  \textbf{Two structural reasons to try:}
+  (1) Some signals have persistently negative IC---the static $+0.05$ is structurally wrong.
+  (2) The IC function is non-linear in $z$ (the data will show this).
+
+  \medskip
+  \textbf{Honest caveat.} $\SNR \approx 0.05$ means 95\% of return variance is noise.
+  We track slow structural drift over months---not rapid day-to-day regime detection.
+\end{frame}
+
+% ── 3. DATA ───────────────────────────────────────────────────────────────────
+\begin{frame}{Data and Feature Engineering}
+  \begin{columns}
+    \begin{column}{0.52\textwidth}
+      \textbf{Dataset.}
+      Barra U.S.\ equity factor model, 2010--2024.
+      $\approx 3{,}000$ stocks/day, 8 daily signals:
+      style/industry/idiosyncratic momentum \& reversal, idiosyncratic volatility, BAB.
+      Reversal signals are negated at construction (high recent loss $\Rightarrow$ high $z$).
+
+      \medskip
+      \textbf{Risk normalization.}
+      Regress on $y_{i,t} = r_{i,t+1}/\sigma_{i,t}$ instead of raw returns.
+      Under the Grinold model $\E[y_{i,t}\mid z_{i,t}] = \IC_t(z_{i,t})\cdot z_{i,t}$,
+      so the OLS slope is directly IC, free of cross-sectional scale differences.
+
+      \medskip
+      \textbf{Other preprocessing.}
+      Winsorize signals to 1st--99th percentile; clip z-scores to $[-3,3]$;
+      price filter $>\$5$ to remove illiquid micro-caps.
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \includegraphics[width=\linewidth]{blob_chart.png}
+      {\footnotesize
+      Each dot: one $(z_{i,t}, y_{i,t})$ pair over a 120-day window ($\approx$360k obs).
+      The OLS slope (IC $\approx 0.05$) is nearly horizontal against the noise cloud.
+      \textbf{Blue circles} (bin means) show IC is non-constant in $z$---motivating a nonlinear estimator.
+      Observations thin past $|z|=2$: tail IC estimates are least reliable but most consequential.}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% ── 4. METHODS: KRR ───────────────────────────────────────────────────────────
+\begin{frame}{Methods: Kernel Ridge Regression}
+  \textbf{Goal.} Learn $f \colon \R \to \R$ (z-score $\mapsto$ IC estimate) from the rolling 120-day buffer of $(z_i, y_i)$ pairs.
+
+  \medskip
+  \textbf{Regularized least squares in the RKHS} (RBF kernel $k(z,z')=C\exp(-(z-z')^2/2\ell^2)$):
+  \[
+    \min_{f \in \Hk}\; \sum_{i=1}^n (f(z_i) - y_i)^2 + \alpha \|f\|_\Hk^2.
+  \]
+  The \textbf{Representer Theorem} says any minimizer has the form $f(z) = \sum_i c_i k(z, z_i)$.
+  Substituting into the objective and letting $\mathbf{K}_{ij} = k(z_i, z_j)$:
+  \[
+    c = (\mathbf{K} + \alpha \mathbf{I})^{-1} y,
+    \qquad
+    \hat{f}(z^*) = k_*^\top (\mathbf{K} + \alpha \mathbf{I})^{-1} y.
+  \]
+
+  \medskip
+  \textbf{SNR calibration.}
+  With $\SNR = 0.05$, the noise-to-signal ratio is $1/\SNR = 19$.
+  We fix $\alpha = 19$: unless the data overwhelmingly support a non-zero IC, the prediction is shrunk toward zero.
+
+  \medskip
+  \textbf{Key property.} $\hat{f}(z^*)$ is unconstrained in sign $\Rightarrow$ model can output $\IC < 0$ when the data support it.
+\end{frame}
+
+% ── 5. METHODS: GPR ───────────────────────────────────────────────────────────
+\begin{frame}{Methods: Gaussian Process Regression}
+  \textbf{A GP places a prior directly over functions.}
+  $f \sim \GP(0, k)$ means every finite collection $(f(z_1),\ldots,f(z_n))$
+  is jointly Gaussian with covariance $\mathbf{K}_{ij} = k(z_i, z_j)$.
+  We use the zero-mean prior: without data, the IC is expected to be near zero.
+
+  \medskip
+  \textbf{Observation model.} $y_i = f(z_i) + \varepsilon_i$, $\varepsilon_i \sim \Nrm(0,\sigma_n^2)$.
+  The joint distribution of $y$ and a test point $f_* = f(z^*)$ is Gaussian;
+  conditioning on $y$ gives the exact posterior:
+  \[
+    f_* \mid y \;\sim\; \Nrm\!\left(\;
+      \underbrace{k_*^\top(\mathbf{K}+\sigma_n^2\mathbf{I})^{-1}y}_{\mu_*(z^*)},\;\;
+      \underbrace{k(z^*,z^*) - k_*^\top(\mathbf{K}+\sigma_n^2\mathbf{I})^{-1}k_*}_{\sigma_*^2(z^*)}
+    \;\right).
+  \]
+
+  \medskip
+  \textbf{Two design choices.}
+  (1) Fix $\sigma_n^2 = 0.952$ (noise proportion at $\SNR=0.05$)---prevents the optimizer from collapsing $\sigma_n^2 \to 0$ and interpolating through noise.
+  (2) The per-stock alpha variance $\Var[\hat\alpha_{i,t}] = z_{i,t}^2 \cdot \sigma_*^2(z_{i,t})$ is added to the portfolio covariance matrix, down-weighting stocks where the IC estimate is unreliable.
+
+  \medskip
+  \textbf{Note.} $\mu_*(z^*)$ is identical to the KRR prediction with $\alpha = \sigma_n^2$.
+  GPR's advantage is the exact posterior variance.
+\end{frame}
+
+% ── 6. METHODS: MVO ───────────────────────────────────────────────────────────
+\begin{frame}{Methods: Portfolio Construction}
+  \textbf{Alpha forecast.} Both models output $\widehat{\IC}_t(z)$; the alpha for stock $i$ is:
+  \[
+    \hat\alpha_{i,t} = \widehat{\IC}_t(z_{i,t})\cdot\sigma_{i,t}\cdot z_{i,t}.
+  \]
+
+  \textbf{Mean-variance optimization (MVO).}
+  Given alphas $\mu_t$ and Barra factor covariance $\Sigma_t$, solve:
+  \[
+    \max_{w \in \R^N}\; w^\top \mu_t - \tfrac{\gamma}{2}\, w^\top \Sigma_t w
+    \quad \text{s.t.} \quad
+    w^\top \beta_{\mathrm{mkt}} = 0,\quad \mathbf{1}^\top w = 0,
+  \]
+  with risk aversion $\gamma = 200$.
+  Constraints enforce \textbf{market-neutrality} (zero market beta) and \textbf{dollar-neutrality} (equal long/short), so returns reflect pure signal skill.
+  The unconstrained solution $w^* = \frac{1}{\gamma}\Sigma_t^{-1}\mu_t$ is projected onto the feasible set via Lagrange multipliers (implemented in CVXPY).
+
+  \medskip
+  \textbf{Walk-forward discipline.}
+  On each day $t$: update the 120-day buffer with yesterday's $(z, y)$ pairs $\to$ refit $\to$ predict $\to$ optimize $\to$ trade.
+  No look-ahead bias: the model at time $t$ never sees data from $t+1$ onward.
+  First 120 days are burn-in.
+\end{frame}
+
+% ── 7. RESULTS: EW PORTFOLIO ──────────────────────────────────────────────────
+\begin{frame}{Results: Equal-Weighted Portfolio (All 8 Signals)}
+  \begin{center}
+  \renewcommand{\arraystretch}{1.35}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Model} & \textbf{Ann.\ Return \%} & \textbf{Vol \%} & \textbf{Sharpe} & \textbf{Max Drawdown \%} \\
+    \midrule
+    Kalman Poly & $0.94$ & $0.79$ & $\mathbf{1.189}$ & $-0.73$ \\
+    Static      & $1.01$ & $1.00$ & $1.006$          & $-2.69$ \\
+    GPR         & $0.90$ & $0.92$ & $0.979$          & $-0.87$ \\
+    KRR         & $0.54$ & $0.88$ & $0.613$          & $-1.24$ \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \bigskip
+  All four models produce positive Sharpe ratios on a fully market- and dollar-neutral portfolio.
+  The static baseline is competitive---dynamic IC estimation does not dominate at the portfolio level.
+
+  \bigskip
+  \textbf{Why?}
+  Diversifying across 8 signals averages out the cases where dynamic IC helps
+  (sign-uncertain reversal signals) with the cases where it hurts (momentum signals
+  whose IC is persistently positive in this sample).
+\end{frame}
+
+% ── 8. RESULTS: PER-SIGNAL ────────────────────────────────────────────────────
+\begin{frame}{Results: Where Dynamic IC Helps and Hurts}
+  \begin{center}
+  \footnotesize
+  \renewcommand{\arraystretch}{1.2}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Signal / Model} & \textbf{Ret\%} & \textbf{Vol\%} & \textbf{Sharpe} & \textbf{MaxDD\%} \\
+    \midrule
+    \multicolumn{5}{c}{\emph{Idiosyncratic Reversal --- dynamic models reduce drawdown dramatically}} \\
+    Static       & $6.82$ & $6.80$ & $1.003$ & $-17.57$ \\
+    GPR          & $5.05$ & $3.99$ & $\mathbf{1.266}$ & $\mathbf{-1.62}$ \\
+    KRR          & $3.20$ & $2.66$ & $1.202$ & $-1.32$  \\
+    \midrule
+    \multicolumn{5}{c}{\emph{Style Reversal --- dynamic models rescue a negative-Sharpe static}} \\
+    Static       & $-0.46$ & $0.84$ & $-0.550$ & $-3.07$ \\
+    GPR          & $0.35$  & $1.40$ & $0.248$  & $-2.29$ \\
+    Kalman Poly  & $0.69$  & $1.15$ & $\mathbf{0.597}$  & $-1.34$ \\
+    \midrule
+    \multicolumn{5}{c}{\emph{Idiosyncratic Momentum --- static dominates; dynamic models add noise}} \\
+    Static       & $1.55$  & $1.30$ & $\mathbf{1.192}$ & $-1.61$ \\
+    GPR          & $-0.08$ & $1.19$ & $-0.066$ & $-2.79$ \\
+    KRR          & $0.03$  & $1.06$ & $0.028$  & $-2.45$ \\
+    \bottomrule
+  \end{tabular}
+  \end{center}
+
+  \smallskip
+  Dynamic models are most useful when IC sign is \emph{structurally uncertain}.
+  When IC is persistently positive, the static model's $+0.05$ is right and dynamic estimation adds noise at $\SNR = 0.05$.
+\end{frame}
+
+% ── 9. ETHICS ─────────────────────────────────────────────────────────────────
+\begin{frame}{Ethical Implications}
+  \textbf{1. Crowding and self-defeating feedback.}\\
+  If many institutions simultaneously estimate $\IC_t(z)$ and tilt toward high-$|z|$ stocks,
+  correlated demand compresses the very premium being exploited.
+  The sign-inversion feature amplifies this: simultaneous position reversals by many traders
+  could trigger cascades. Position limits and turnover controls are necessary complements.
+
+  \bigskip
+  \textbf{2. Access inequality.}\\
+  These models require licensed Barra factor data, daily-frequency returns, and significant compute---resources unavailable to retail investors.
+  Widespread institutional adoption could widen the information gap between professional and retail participants, effectively transferring wealth at the times when IC is most predictable.
+
+  \bigskip
+  \textbf{3. Model fragility.}\\
+  Both models assume stationarity within the 120-day buffer.
+  A model that has learned $\IC < 0$ for a reversal signal may keep trading the inverted
+  position after the regime has reverted, generating large drawdowns precisely when
+  volatility is highest. Ongoing IC monitoring and automatic de-risking rules are essential.
+\end{frame}
+
+% ── 10. CONCLUSIONS ───────────────────────────────────────────────────────────
+\begin{frame}{Conclusions}
+  \begin{block}{Central finding}
+    $\IC_t(z)$ is non-constant in both $z$ and $t$. Kernel-based estimators can
+    represent this, but the benefit is signal-specific, not universal.
+  \end{block}
+
+  \medskip
+  \begin{tabular}{ll}
+    \textbf{Risk normalization} & removes heteroskedasticity; slope = IC directly \\[3pt]
+    \textbf{SNR-calibrated regularization} & $\alpha=19$ (KRR), $\sigma_n^2=0.952$ (GPR) \\[3pt]
+    \textbf{Sign-flexible IC} & both kernel models can output $\IC<0$ \\[3pt]
+    \textbf{Uncertainty propagation} & GPR posterior variance enters MVO covariance \\[3pt]
+    \textbf{Rolling window} & slow structural adaptation; not rapid regime detection \\
+  \end{tabular}
+
+  \medskip
+  \textbf{Bottom line.}
+  Dynamic IC estimation is most valuable for signals whose sign is structurally uncertain
+  (e.g., reversal signals).
+  When a signal's IC is persistently positive, the static $\IC = 0.05$ is hard to beat
+  in a $\SNR = 0.05$ environment---the noise floor limits what any adaptive estimator can learn.
+\end{frame}
+
+\end{document}

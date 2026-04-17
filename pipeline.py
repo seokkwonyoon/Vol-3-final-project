@@ -127,9 +127,6 @@ class DynamicICPipeline:
         dates = data["date"].unique().sort()
         results = []
 
-        # Buffer for online models: (z_array, y_array) per past day
-        buffer: list[tuple[np.ndarray, np.ndarray]] = []
-
         for i, today in enumerate(dates):
             today_data = data.filter(pl.col("date") == today)
             if today_data.height == 0:

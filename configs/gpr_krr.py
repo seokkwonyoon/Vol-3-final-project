@@ -6,6 +6,8 @@ from configs.default import *
 MODELS = [
     "gaussian_process_regression",
     "kernel_ridge_regression",
+    "kalman_poly",
+    "static",
 ]
 
 # no nadaraya-watson so training is quite fast

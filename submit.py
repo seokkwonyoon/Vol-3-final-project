@@ -26,9 +26,12 @@ Usage:
     uv run python submit.py --dry-run                   # print scripts, no submission
     uv run python submit.py --config configs/test.py    # use a custom config
     uv run python submit.py --model static
+    uv run python submit.py --clear                     # wipe results for active split, then rerun
+    uv run python submit.py --clear --dry-run           # show what would be deleted, no action
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -42,6 +45,44 @@ from configs import (
     SLURM_TIME_ANALYZE, SLURM_CPUS_ANALYZE, SLURM_MEM_ANALYZE,
 )
 from timing import estimate_seconds, to_slurm_time
+
+
+# ── Result clearing ──────────────────────────────────────────────────────────
+
+def clear_split(split: str, dry_run: bool) -> None:
+    """Delete all computed results for *split* so the pipeline starts completely fresh."""
+    target = os.path.join(PROJECT_ROOT, "results", split)
+
+    if not os.path.exists(target):
+        print(f"Nothing to clear: {target} does not exist.")
+        return
+
+    # Summarise what will be removed
+    subdirs = sorted(
+        d for d in os.listdir(target)
+        if os.path.isdir(os.path.join(target, d))
+    )
+    files = sorted(
+        f for f in os.listdir(target)
+        if os.path.isfile(os.path.join(target, f))
+    )
+    print(f"\nWill delete: {target}")
+    for name in subdirs:
+        print(f"  {name}/")
+    for name in files:
+        print(f"  {name}")
+
+    if dry_run:
+        print("(dry-run — nothing deleted)\n")
+        return
+
+    confirm = input(f"\nDelete all results for split '{split}'? [y/N] ").strip().lower()
+    if confirm != "y":
+        print("Aborted.")
+        sys.exit(0)
+
+    shutil.rmtree(target)
+    print(f"Cleared {target}\n")
 
 
 # ── Slurm submission helper ───────────────────────────────────────────────────
@@ -225,7 +266,7 @@ def phase4_script(split: str, dep_id: str, time_limit: str,
         job_name=f"dic_analyze_{split}",
         log_prefix="analyze",
         n_cpus=SLURM_CPUS_ANALYZE, mem=SLURM_MEM_ANALYZE, time=time_limit,
-        dependency=f"afterok:{dep_id}",
+        dependency=f"afterany:{dep_id}",
         mail_type="END,FAIL",
     )
     body = textwrap.dedent(f"""\
@@ -247,6 +288,8 @@ def main():
               uv run python submit.py --dry-run
               uv run python submit.py --config configs/test.py
               uv run python submit.py --model static
+              uv run python submit.py --clear             (wipe split results, then rerun)
+              uv run python submit.py --clear --dry-run   (preview what would be deleted)
 
             Split and signals are configured in configs/default.py (SPLIT, SELECTED_SIGNALS).
             Pass --config to override with a different config file.
@@ -261,12 +304,18 @@ def main():
                         help="Restrict to a single model (default: all)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print generated scripts without submitting")
+    parser.add_argument("--clear", action="store_true",
+                        help="Delete existing results for the active split before submitting "
+                             "(forces a clean rerun; prompts for confirmation)")
     args = parser.parse_args()
 
     signals = SELECTED_SIGNALS or SIGNALS
     models  = [args.model] if args.model else MODELS
     pairs   = [(s, m) for s in signals for m in models]
     split   = SPLIT
+
+    if args.clear:
+        clear_split(split, args.dry_run)
 
     os.makedirs(f"{PROJECT_ROOT}/logs", exist_ok=True)
 

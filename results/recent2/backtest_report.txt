@@ -1,0 +1,60 @@
+
+Backtest Summary — recent2
+Strategy                                      Mean%    Vol%   Sharpe   MaxDD%
+-----------------------------------------------------------------------------
+style_momentum/gaussian_process_regression    0.48    1.17    0.414    -2.30
+style_momentum/kernel_ridge_regression        0.44    1.05    0.423    -2.15
+style_momentum/kalman_poly                    0.67    0.72    0.933    -0.96
+style_momentum/static                         0.47    0.81    0.579    -2.29
+industry_momentum/gaussian_process_regression    0.33    1.11    0.293    -2.14
+industry_momentum/kernel_ridge_regression     0.28    0.92    0.301    -1.82
+industry_momentum/kalman_poly                 0.27    0.51    0.536    -1.10
+industry_momentum/static                      0.41    0.87    0.469    -1.83
+idiosyncratic_momentum/gaussian_process_regression   -0.08    1.19   -0.066    -2.79
+idiosyncratic_momentum/kernel_ridge_regression    0.03    1.06    0.028    -2.45
+idiosyncratic_momentum/kalman_poly           -0.48    1.32   -0.366    -4.08
+idiosyncratic_momentum/static                 1.55    1.30    1.192    -1.61
+style_reversal/gaussian_process_regression    0.35    1.40    0.248    -2.29
+style_reversal/kernel_ridge_regression        0.08    1.34    0.058    -3.45
+style_reversal/kalman_poly                    0.69    1.15    0.597    -1.34
+style_reversal/static                        -0.46    0.84   -0.550    -3.07
+industry_reversal/gaussian_process_regression    0.11    1.35    0.082    -3.28
+industry_reversal/kernel_ridge_regression     0.15    1.15    0.131    -2.52
+industry_reversal/kalman_poly                -0.05    0.56   -0.081    -2.46
+industry_reversal/static                     -0.88    0.95   -0.932    -4.76
+idiosyncratic_reversal/gaussian_process_regression    5.05    3.99    1.266    -1.62
+idiosyncratic_reversal/kernel_ridge_regression    3.20    2.66    1.202    -1.32
+idiosyncratic_reversal/kalman_poly            4.54    5.00    0.908    -6.76
+idiosyncratic_reversal/static                 6.82    6.80    1.003   -17.57
+idiosyncratic_volatility/gaussian_process_regression    0.46    1.50    0.304    -2.72
+idiosyncratic_volatility/kernel_ridge_regression    0.14    1.35    0.101    -3.19
+idiosyncratic_volatility/kalman_poly          1.02    0.99    1.037    -1.36
+idiosyncratic_volatility/static               0.23    1.78    0.132    -5.49
+betting_against_beta/gaussian_process_regression    0.48    1.25    0.383    -2.97
+betting_against_beta/kernel_ridge_regression    0.01    1.27    0.006    -3.97
+betting_against_beta/kalman_poly              0.83    1.71    0.484    -2.93
+betting_against_beta/static                  -0.08    1.12   -0.076    -2.47
+
+  gaussian_process_regression [EW all signals]    0.90    0.92    0.979    -0.87
+  kernel_ridge_regression [EW all signals]    0.54    0.88    0.613    -1.24
+  kalman_poly [EW all signals]                0.94    0.79    1.189    -0.73
+  static [EW all signals]                     1.01    1.00    1.006    -2.69
+-----------------------------------------------------------------------------
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_style_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_industry_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_idiosyncratic_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_style_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_industry_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_idiosyncratic_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_idiosyncratic_volatility.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/performance_betting_against_beta.png
+
+Portfolio overview → /home/connerd4/silverfund/Vol-3-final-project/results/recent2/portfolio_overview.png

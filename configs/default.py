@@ -8,16 +8,17 @@ from pathlib import Path
 SPLITS = {
     "full":   {"start": dt.date(1995, 1, 1), "end": dt.date(2025, 1, 1)},
     "recent":  {"start": dt.date(2010, 1, 1), "end": dt.date(2025, 1, 1)},
+    "recent2": {"start": dt.date(2020, 1, 1), "end": dt.date(2025, 1, 1)},
     "test": {"start": dt.date(2022, 1, 1), "end": dt.date(2024, 1, 1)}
 }
 
 # Active split — change this to switch between "full", "recent", or "test"
-SPLIT = "recent"
+SPLIT = "full"
 
 # ── Strategy parameters ──────────────────────────────────────────────────────
 STATIC_IC = 0.05             # Baseline IC for the static benchmark
 GAMMA = 200                  # Risk-aversion for MVO
-LOOKBACK_DAYS = 120          # Rolling window fed to IC models (trading days)
+LOOKBACK_DAYS = 504          # Rolling window fed to IC models (trading days)
 
 # ── Signal-to-Noise Ratio (SNR) ──────────────────────────────────────────────
 # Used to tune ML models for low-SNR environments.
@@ -97,12 +98,12 @@ SLURM_CPUS_TRAIN   = 4     # sequential loop; extra CPUs don't help
 SLURM_MEM_TRAIN    = "32G"
 
 # Phase 3: MVO via Ray (one task per signal×model)
-SLURM_TIME_MVO     = "01:30:00"   # 15 yr × 5 min/yr = 75 min + buffer
+SLURM_TIME_MVO     = "07:00:00"   # 15 yr × 5 min/yr = 75 min + buffer
 SLURM_CPUS_MVO     = 16           # Ray fans out across all CPUs
 SLURM_MEM_MVO      = "64G"
 
 # Phase 4: analysis and chart generation
-SLURM_TIME_ANALYZE = "01:00:00"
+SLURM_TIME_ANALYZE = "02:00:00"
 SLURM_CPUS_ANALYZE = 4
 SLURM_MEM_ANALYZE  = "32G"
 

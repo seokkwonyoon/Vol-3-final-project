@@ -17,6 +17,7 @@ import sys
 import time
 
 import numpy as np
+import pandas as pd
 import polars as pl
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -106,62 +107,41 @@ def compute_equal_weighted_portfolio(portfolios: list[pl.DataFrame]) -> pl.DataF
 
 
 def visualise_portfolio_overview(
-    ew_portfolio: pl.DataFrame,
-    all_portfolios: list[pl.DataFrame],
-    signals: list[str],
+    mod_ew_map: dict[str, pl.DataFrame],
     split: str,
     out_dir: str,
 ):
-    """Fan chart: all signal/model lines (thin, by signal color) + EW aggregate (bold black)."""
-    signal_colors = plt.cm.tab10(np.linspace(0, 1.0, len(signals)))
-    sig_color_map = dict(zip(signals, signal_colors))
+    """One EW-across-all-signals line per model."""
+    models = list(mod_ew_map.keys())
+    model_colors = plt.cm.tab10(np.linspace(0, 1.0, len(models)))
 
-    fig, axes = plt.subplots(3, 1, figsize=(13, 11),
+    fig, axes = plt.subplots(3, 1, figsize=(11, 9),
                              gridspec_kw={"height_ratios": [2, 1, 1]})
     ax_cum, ax_dd, ax_sharpe = axes
 
-    for pf in all_portfolios:
-        sig = pf["name"][0].split("/")[0]
-        color = sig_color_map.get(sig, "gray")
-        pf_pd = pf.sort("date").to_pandas().set_index("date")
+    for (mod, mod_ew), color in zip(mod_ew_map.items(), model_colors):
+        pf_pd = mod_ew.sort("date").to_pandas().set_index("date")
         rets = pf_pd["return"].fillna(0.0)
         cum = np.log1p(rets).cumsum() * 100
         rolling_m = rets.rolling(252).mean() * 252 * 100
         rolling_v = rets.rolling(252).std() * np.sqrt(252) * 100
         rolling_s = rolling_m / rolling_v.replace(0, np.nan)
-        ax_cum.plot(pf_pd.index, cum, color=color, alpha=0.18, linewidth=0.7)
-        ax_dd.plot(pf_pd.index, cum - cum.cummax(), color=color, alpha=0.18, linewidth=0.7)
-        ax_sharpe.plot(pf_pd.index, rolling_s, color=color, alpha=0.18, linewidth=0.7)
-
-    ew_pd = ew_portfolio.sort("date").to_pandas().set_index("date")
-    ew_rets = ew_pd["return"].fillna(0.0)
-    ew_cum = np.log1p(ew_rets).cumsum() * 100
-    ew_rolling_m = ew_rets.rolling(252).mean() * 252 * 100
-    ew_rolling_v = ew_rets.rolling(252).std() * np.sqrt(252) * 100
-    ew_rolling_s = ew_rolling_m / ew_rolling_v.replace(0, np.nan)
-
-    ax_cum.plot(ew_pd.index, ew_cum, color="black", linewidth=2.0, zorder=5)
-    ax_dd.plot(ew_pd.index, ew_cum - ew_cum.cummax(), color="black", linewidth=2.0, zorder=5)
-    ax_sharpe.plot(ew_pd.index, ew_rolling_s, color="black", linewidth=2.0, zorder=5)
-
-    legend_handles = [
-        Line2D([0], [0], color=sig_color_map[s], linewidth=1.5, label=s)
-        for s in signals if s in sig_color_map
-    ] + [Line2D([0], [0], color="black", linewidth=2.0, label="EW Portfolio")]
+        ax_cum.plot(pf_pd.index, cum, color=color, linewidth=1.2, label=mod)
+        ax_dd.plot(pf_pd.index, cum - cum.cummax(), color=color, linewidth=1.2)
+        ax_sharpe.plot(pf_pd.index, rolling_s, color=color, linewidth=1.2)
 
     for ax in axes:
         ax.yaxis.grid(True)
 
-    ax_cum.axhline(0, color="black", linewidth=0.8, alpha=0.4)
-    ax_cum.set_title(f"Portfolio Overview — Equal-Weighted ({split})", loc="left")
+    ax_cum.axhline(0, color="black", linewidth=0.6, alpha=0.4)
+    ax_cum.set_title(f"Model Comparison — EW Across All Signals ({split})", loc="left")
     ax_cum.set_ylabel("Cumulative Log Return (%)")
-    ax_cum.legend(handles=legend_handles, loc="upper left",
-                  bbox_to_anchor=(1.02, 1), borderaxespad=0, fontsize=8)
+    ax_cum.legend(loc="upper left", fontsize=8, ncol=2)
 
     ax_dd.set_title("Drawdown", loc="left")
     ax_dd.set_ylabel("Drawdown (%)")
 
-    ax_sharpe.axhline(0, color="black", linewidth=0.8, alpha=0.4)
+    ax_sharpe.axhline(0, color="black", linewidth=0.6, alpha=0.4)
     ax_sharpe.set_title("Rolling 1-Year Sharpe", loc="left")
     ax_sharpe.set_ylabel("Sharpe Ratio")
 
@@ -184,12 +164,17 @@ def compute_stats(returns: np.ndarray) -> dict:
 
 
 def visualise_ic_function(
-    split: str, sig: str, dynamic_models: list[str], out_dir: str
+    split: str, sig: str, dynamic_models: list[str], assets: pl.DataFrame, out_dir: str
 ):
     """
-    Plot the IC function IC(z) at three checkpoints in time for each model.
-    We re-run each model's prediction on a z_grid using the final-state weights
-    saved during walk-forward (we re-fit up to each checkpoint date).
+    Plot IC(z) at three checkpoints by replaying the walk-forward training.
+
+    A single pass through the dates trains each model continuously and snapshots
+    the IC curve at each checkpoint — O(1) passes vs the original O(checkpoints).
+
+    Training uses y = forward_return / specific_risk (risk-normalised returns),
+    matching what the live pipeline feeds to model.update(). The original code
+    incorrectly passed sigma-scaled alphas, causing the discontinuity.
     """
     z_path = z_scores_path(split, sig)
     if not os.path.exists(z_path):
@@ -204,44 +189,91 @@ def visualise_ic_function(
     checkpoints = [dates[n // 6], dates[n // 2], dates[5 * n // 6]]
     z_grid = np.linspace(-3.0, 3.0, 200)
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
-    colors = plt.cm.tab10(np.linspace(0, 0.8, len(dynamic_models)))
+    # Join z-scores with assets once to get correct training targets y = r/sigma.
+    # Filter to the last checkpoint to avoid processing unnecessary data.
+    training_data = (
+        z_scores.filter(pl.col("date") <= checkpoints[-1])
+        .join(
+            assets.select(["date", "barrid", "forward_return", "specific_risk"]),
+            on=["date", "barrid"],
+            how="inner",
+        )
+        .filter(
+            (pl.col("specific_risk") > 0)
+            & pl.col("forward_return").is_not_null()
+            & pl.col("z_score").is_not_null()
+        )
+        .sort("date", "barrid")
+        .select(["date", "z_score", "forward_return", "specific_risk"])
+        .to_pandas()
+    )
+    if training_data.empty:
+        return
 
+    all_dates = sorted(training_data["date"].unique())
+    date_groups = {d: g for d, g in training_data.groupby("date", sort=False)}
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
     for ax, checkpoint in zip(axes, checkpoints):
         ax.axhline(0.05, color="black", linestyle="--", linewidth=0.8,
                    alpha=0.6, label="static IC=0.05")
         ax.axhline(0, color="gray", linewidth=0.4)
-
-        for model_name, color in zip(dynamic_models, colors):
-            a_path = alphas_path(split, sig, model_name)
-            if not os.path.exists(a_path):
-                continue
-
-            # Re-fit the model sequentially up to the checkpoint date
-            model = MODEL_REGISTRY[model_name]()
-            past_z = z_scores.filter(pl.col("date") <= checkpoint)
-            past_alphas = pl.read_parquet(a_path).filter(pl.col("date") <= checkpoint)
-
-            joined = past_z.join(
-                past_alphas.select(["date", "barrid", "alpha"]),
-                on=["date", "barrid"], how="inner",
-            ).sort("date", "barrid")
-
-            # Group by date once and iterate over pre-partitioned arrays
-            joined_pd = joined.select(["date", "z_score", "alpha"]).to_pandas()
-            for _, day in joined_pd.groupby("date", sort=True):
-                model.update(day["z_score"].to_numpy(), day["alpha"].to_numpy())
-
-            alpha_z_pred, _ = model.predict(z_grid)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                ic_curve = np.where(np.abs(z_grid) > 0.1,
-                                    alpha_z_pred / z_grid, np.nan)
-            ax.plot(z_grid, ic_curve, label=model_name, color=color)
-
-        ax.set_title(f"{checkpoint}", fontsize=9)
+        ax.set_title(str(checkpoint), fontsize=9)
         ax.set_xlabel("Z-score")
         ax.set_xlim(-3, 3)
         ax.yaxis.grid(True)
+
+    colors = plt.cm.tab10(np.linspace(0, 0.8, len(dynamic_models)))
+
+    for model_name, color in zip(dynamic_models, colors):
+        model = MODEL_REGISTRY[model_name]()
+        checkpoint_idx = 0
+
+        for date in all_dates:
+            day = date_groups.get(date)
+            if day is None or len(day) == 0:
+                continue
+
+            z = day["z_score"].to_numpy()
+            r = day["forward_return"].to_numpy()
+            sigma = day["specific_risk"].to_numpy() / 100.0
+            valid = (sigma > 0) & np.isfinite(r) & np.isfinite(z)
+            if valid.any():
+                model.update(z[valid], r[valid] / sigma[valid])
+
+            # Snapshot at each checkpoint. Use >= to handle non-trading checkpoint
+            # dates by triggering on the first trading day at or after the target.
+            while (checkpoint_idx < len(checkpoints)
+                   and date >= checkpoints[checkpoint_idx]):
+                alpha_z_pred, _ = model.predict(z_grid)
+
+                if hasattr(model, "get_ic_curve"):
+                    # BinnedKalman: read IC per bin directly (avoids alpha_z/z)
+                    centres, ic_vals = model.get_ic_curve()
+                    axes[checkpoint_idx].step(
+                        centres, ic_vals, label=model_name,
+                        color=color, linewidth=1.0, where="mid",
+                    )
+                else:
+                    # General case: IC(z) = alpha_z / z, mask unstable near-zero region
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        ic_curve = np.where(
+                            np.abs(z_grid) > 0.3,
+                            alpha_z_pred / z_grid,
+                            np.nan,
+                        )
+                    ic_curve = (
+                        pd.Series(ic_curve)
+                        .interpolate(method="linear")
+                        .bfill()
+                        .ffill()
+                        .to_numpy()
+                    )
+                    axes[checkpoint_idx].plot(
+                        z_grid, ic_curve, label=model_name,
+                        color=color, linewidth=1.0,
+                    )
+                checkpoint_idx += 1
 
     axes[0].set_ylabel("Estimated IC(z)")
     axes[0].legend(fontsize=7, loc="upper left")
@@ -271,22 +303,23 @@ def main():
     log_path = os.path.join(out_dir, "backtest_report.txt")
     sys.stdout = Tee(log_path)
 
-    # Load forward returns once
+    # Load forward returns and specific risk (specific_risk needed for IC visualization)
     from signals._asset_signal import ASSETS_PATH
-    forward_returns = (
+    assets = (
         pl.scan_parquet(ASSETS_PATH)
         .filter(
             (pl.col("date") >= split_cfg["start"]) & (pl.col("date") <= split_cfg["end"]),
             pl.col("in_universe"),
         )
-        .select(["date", "barrid", "return"])
+        .select(["date", "barrid", "return", "specific_risk"])
         .collect()
         .sort(["barrid", "date"])
         .with_columns(
             pl.col("return").truediv(100).shift(-1).over("barrid").alias("forward_return")
         )
-        .select(["date", "barrid", "forward_return"])
+        .select(["date", "barrid", "forward_return", "specific_risk"])
     )
+    forward_returns = assets.select(["date", "barrid", "forward_return"])
 
     set_academic_style()
 
@@ -295,6 +328,7 @@ def main():
     print("-" * 77)
 
     all_portfolios: list[pl.DataFrame] = []
+    mod_pfs_map: dict[str, list[pl.DataFrame]] = {mod: [] for mod in MODELS}
 
     for sig in signals:
         for mod in MODELS:
@@ -309,18 +343,27 @@ def main():
                 f"{stats['vol_ann']:>6.2f}  {stats['sharpe']:>7.3f}  "
                 f"{stats['max_dd']:>7.2f}"
             )
+            mod_pfs_map[mod].append(pf)
             all_portfolios.append(pf)
 
-    # ── Equal-weighted portfolio summary ──────────────────────────────────────
-    if all_portfolios:
-        ew_portfolio = compute_equal_weighted_portfolio(all_portfolios)
-        ew_rets = ew_portfolio["return"].fill_null(0.0).to_numpy()
+    # ── Per-model EW across all signals ───────────────────────────────────
+    print()
+    mod_ew_map: dict[str, pl.DataFrame] = {}
+    for mod in MODELS:
+        pfs = mod_pfs_map[mod]
+        if not pfs:
+            continue
+        mod_ew = compute_equal_weighted_portfolio(pfs)
+        mod_ew_map[mod] = mod_ew
+        ew_rets = mod_ew["return"].fill_null(0.0).to_numpy()
         ew_stats = compute_stats(ew_rets)
+        label = f"  {mod} [EW all signals]"
         print(
-            f"{'EQUAL-WEIGHTED PORTFOLIO':<42} {ew_stats['mean_ann']:>7.2f}  "
+            f"{label:<42} {ew_stats['mean_ann']:>7.2f}  "
             f"{ew_stats['vol_ann']:>6.2f}  {ew_stats['sharpe']:>7.3f}  "
             f"{ew_stats['max_dd']:>7.2f}"
         )
+
     print("-" * 77)
 
     if not all_portfolios:
@@ -336,7 +379,7 @@ def main():
         if not sig_portfolios:
             continue
 
-        fig, axes = plt.subplots(3, 1, figsize=(11, 10),
+        fig, axes = plt.subplots(3, 1, figsize=(10, 9),
                                  gridspec_kw={"height_ratios": [2, 1, 1]})
         ax_cum, ax_dd, ax_sharpe = axes
 
@@ -346,29 +389,26 @@ def main():
             mod_label = pf_pd["name"].iloc[0].split("/")[1]
 
             cum = np.log1p(rets).cumsum() * 100
-            cum_max = cum.cummax()
-            dd = cum - cum_max
             rolling_m = rets.rolling(252).mean() * 252 * 100
             rolling_v = rets.rolling(252).std() * np.sqrt(252) * 100
             rolling_s = rolling_m / rolling_v.replace(0, np.nan)
 
-            ax_cum.plot(pf_pd.index, cum, label=mod_label)
-            ax_dd.plot(pf_pd.index, dd, label=mod_label, alpha=0.85)
-            ax_sharpe.plot(pf_pd.index, rolling_s, label=mod_label, alpha=0.85)
+            ax_cum.plot(pf_pd.index, cum, label=mod_label, linewidth=1.0, alpha=0.75)
+            ax_dd.plot(pf_pd.index, cum - cum.cummax(), linewidth=1.0, alpha=0.75)
+            ax_sharpe.plot(pf_pd.index, rolling_s, linewidth=1.0, alpha=0.75)
 
         for ax in axes:
             ax.yaxis.grid(True)
-            ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), borderaxespad=0,
-                      fontsize=8)
 
-        ax_cum.axhline(0, color="black", linewidth=0.8, alpha=0.4)
+        ax_cum.axhline(0, color="black", linewidth=0.6, alpha=0.4)
         ax_cum.set_title(f"Cumulative Return — {sig} ({SPLIT})", loc="left")
         ax_cum.set_ylabel("Cumulative Log Return (%)")
+        ax_cum.legend(loc="upper left", fontsize=8, ncol=2)
 
         ax_dd.set_title("Drawdown", loc="left")
         ax_dd.set_ylabel("Drawdown (%)")
 
-        ax_sharpe.axhline(0, color="black", linewidth=0.8, alpha=0.4)
+        ax_sharpe.axhline(0, color="black", linewidth=0.6, alpha=0.4)
         ax_sharpe.set_title("Rolling 1-Year Sharpe", loc="left")
         ax_sharpe.set_ylabel("Sharpe Ratio")
 
@@ -379,12 +419,12 @@ def main():
         print(f"\nChart → {chart_path}")
 
     # ── Portfolio overview chart ──────────────────────────────────────────────
-    visualise_portfolio_overview(ew_portfolio, all_portfolios, signals, SPLIT, out_dir)
+    visualise_portfolio_overview(mod_ew_map, SPLIT, out_dir)
 
     # ── IC function evolution ─────────────────────────────────────────────────
     dynamic_models = [m for m in MODELS if m != "static"]
     for sig in signals:
-        visualise_ic_function(SPLIT, sig, dynamic_models, out_dir)
+        visualise_ic_function(SPLIT, sig, dynamic_models, assets, out_dir)
 
     elapsed = time.perf_counter() - t0
     record_elapsed("analyze", SPLIT, elapsed)

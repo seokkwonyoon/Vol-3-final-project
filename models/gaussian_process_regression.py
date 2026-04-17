@@ -36,14 +36,16 @@ class GaussianProcessRegressionIC(ICModel):
         noise_level: float = NOISE_PROPORTION,
         lookback_days: int = LOOKBACK_DAYS,
         alpha: float = 1e-6,
+        max_fit_points: int = 300,
     ) -> None:
         self.noise_level = noise_level
         self.lookback_days = lookback_days
         self.alpha = alpha
-        
-        # Rolling buffer of (z, y) pairs
-        self.z_buffer = deque(maxlen=lookback_days)
-        self.y_buffer = deque(maxlen=lookback_days)
+        self.max_fit_points = max_fit_points
+
+        # Rolling buffer: one array per trading day, maxlen=lookback_days days
+        self.z_buffer: deque = deque(maxlen=lookback_days)
+        self.y_buffer: deque = deque(maxlen=lookback_days)
         
         # Initialize the GP model with RBF + WhiteKernel
         # The WhiteKernel's noise is fixed at noise_level
@@ -76,21 +78,24 @@ class GaussianProcessRegressionIC(ICModel):
         if len(z) == 0:
             return
         
-        # Add new data to buffers
-        self.z_buffer.extend(z)
-        self.y_buffer.extend(y)
-        
-        # Refit the model with current buffer
-        if len(self.z_buffer) > 0:
-            Z = np.array(self.z_buffer).reshape(-1, 1)
-            Y = np.array(self.y_buffer)
-            
-            try:
-                self.gp.fit(Z, Y)
-                self.is_fitted = True
-            except Exception:
-                # If fitting fails, keep the old model
-                pass
+        # One entry per day so maxlen=lookback_days is a day count, not obs count
+        self.z_buffer.append(z)
+        self.y_buffer.append(y)
+
+        Z = np.concatenate(list(self.z_buffer)).reshape(-1, 1)
+        Y = np.concatenate(list(self.y_buffer))
+
+        if len(Z) > self.max_fit_points:
+            # Keep the most recent observations (buffer is already time-ordered).
+            # Deterministic and maximally relevant vs random sampling.
+            Z = Z[-self.max_fit_points:]
+            Y = Y[-self.max_fit_points:]
+
+        try:
+            self.gp.fit(Z, Y)
+            self.is_fitted = True
+        except Exception:
+            pass
 
     def predict(self, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -115,21 +120,10 @@ class GaussianProcessRegressionIC(ICModel):
             return np.zeros_like(z), np.ones_like(z)
         
         try:
-            # Get mean prediction (IC(z)) and standard deviation
-            ic_z, ic_std = self.gp.predict(Z, return_std=True)
-            
-            # alpha_z = IC(z) * z
-            alpha_z = ic_z * z
-            
-            # Variance: (∂α/∂IC)² * Var[IC] + (∂α/∂z)² * Var[z]
-            # Since IC and z are independent:
-            # Var[IC*z] ≈ z² * Var[IC] + IC² * Var[z]
-            # We approximate Var[z] as 0 (fixed observations)
-            # So: variance_z ≈ z² * std[IC]²
-            variance_z = (z ** 2) * (ic_std ** 2)
-            
-            # Ensure non-negative variance and handle numerical issues
-            variance_z = np.maximum(variance_z, 1e-8)
+            # GPR is trained on (z, y) pairs where y ≈ IC(z)*z, so predict()
+            # already returns alpha_z = IC(z)*z directly — no extra *z needed.
+            alpha_z, ic_std = self.gp.predict(Z, return_std=True)
+            variance_z = np.maximum(ic_std ** 2, 1e-8)
             
             return alpha_z, variance_z
         except Exception:

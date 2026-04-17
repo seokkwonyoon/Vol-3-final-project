@@ -40,33 +40,28 @@ class KernelRidgeRegressionIC(ICModel):
         lookback_days: int = LOOKBACK_DAYS,
         kernel: str = "rbf",
         gamma: float | None = None,
+        max_fit_points: int = 300,
     ) -> None:
-        # If alpha not specified, use the noise-to-signal ratio
         if alpha is None:
             alpha = NOISE_TO_SIGNAL_RATIO
-        
+
         self.alpha = alpha
         self.lookback_days = lookback_days
         self.kernel = kernel
         self.gamma = gamma
-        
-        # Rolling buffer of (z, y) pairs
-        self.z_buffer = deque(maxlen=lookback_days)
-        self.y_buffer = deque(maxlen=lookback_days)
-        
-        # Initialize KernelRidge with RBF kernel
-        self.krr = KernelRidge(
-            alpha=alpha,
-            kernel=kernel,
-            gamma=gamma,
-        )
-        
+        self.max_fit_points = max_fit_points
+
+        # Rolling buffer: one entry per trading day (stores full cross-section arrays)
+        self.z_buffer: deque[np.ndarray] = deque(maxlen=lookback_days)
+        self.y_buffer: deque[np.ndarray] = deque(maxlen=lookback_days)
+
+        self.krr = KernelRidge(alpha=alpha, kernel=kernel, gamma=gamma)
         self.is_fitted = False
 
     def update(self, z: np.ndarray, y: np.ndarray) -> None:
         """
         Add new observations to the buffer and refit the KRR model.
-        
+
         Parameters
         ----------
         z : np.ndarray, shape (n,)
@@ -76,22 +71,25 @@ class KernelRidgeRegressionIC(ICModel):
         """
         if len(z) == 0:
             return
-        
-        # Add new data to buffers
-        self.z_buffer.extend(z)
-        self.y_buffer.extend(y)
-        
-        # Refit the model with current buffer
-        if len(self.z_buffer) > 0:
-            Z = np.array(self.z_buffer).reshape(-1, 1)
-            Y = np.array(self.y_buffer)
-            
-            try:
-                self.krr.fit(Z, Y)
-                self.is_fitted = True
-            except Exception:
-                # If fitting fails, keep the old model
-                pass
+
+        # One entry per day — not per stock — so maxlen=lookback_days is a day-count
+        self.z_buffer.append(z)
+        self.y_buffer.append(y)
+
+        Z = np.concatenate(self.z_buffer).reshape(-1, 1)
+        Y = np.concatenate(self.y_buffer)
+
+        # Subsample to keep the kernel matrix tractable (O(n³) cost).
+        # Keep the most recent observations (buffer is already time-ordered).
+        if len(Z) > self.max_fit_points:
+            Z = Z[-self.max_fit_points:]
+            Y = Y[-self.max_fit_points:]
+
+        try:
+            self.krr.fit(Z, Y)
+            self.is_fitted = True
+        except Exception:
+            pass
 
     def predict(self, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -116,16 +114,9 @@ class KernelRidgeRegressionIC(ICModel):
             return np.zeros_like(z), np.ones_like(z)
         
         try:
-            # Get prediction (IC(z))
-            ic_z = self.krr.predict(Z)
-            
-            # alpha_z = IC(z) * z
-            alpha_z = ic_z * z
-            
-            # For KRR, we estimate uncertainty via the dual coefficients
-            # and the alpha regularization parameter
-            # Uncertainty increases with regularization (higher noise hypothesis)
-            # We use alpha as a proxy for prediction uncertainty
+            # KRR is trained on (z, y) pairs where y ≈ IC(z)*z, so predict()
+            # already returns alpha_z = IC(z)*z directly — no extra *z needed.
+            alpha_z = self.krr.predict(Z)
             variance_z = np.ones_like(z) * self.alpha / 10.0
             
             # Ensure reasonable variance bounds

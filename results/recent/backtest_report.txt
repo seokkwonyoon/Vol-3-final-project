@@ -1,0 +1,48 @@
+
+Backtest Summary — recent
+Strategy                                      Mean%    Vol%   Sharpe   MaxDD%
+-----------------------------------------------------------------------------
+style_momentum/gaussian_process_regression   -0.19    0.85   -0.227    -5.62
+style_momentum/kernel_ridge_regression        0.11    0.22    0.479    -0.50
+industry_momentum/gaussian_process_regression    0.66    1.00    0.656    -3.09
+industry_momentum/kernel_ridge_regression     0.08    0.17    0.479    -0.61
+idiosyncratic_momentum/gaussian_process_regression   -1.14    2.22   -0.512   -23.39
+idiosyncratic_momentum/kernel_ridge_regression    0.06    0.27    0.238    -1.13
+style_reversal/gaussian_process_regression    0.01    0.95    0.011    -6.44
+style_reversal/kernel_ridge_regression       -0.01    0.23   -0.028    -1.64
+industry_reversal/gaussian_process_regression    0.18    0.87    0.201    -3.28
+industry_reversal/kernel_ridge_regression    -0.01    0.17   -0.031    -0.52
+idiosyncratic_reversal/gaussian_process_regression    3.21    9.71    0.330   -32.83
+idiosyncratic_reversal/kernel_ridge_regression    0.16    0.73    0.223    -4.91
+idiosyncratic_volatility/gaussian_process_regression   -2.21    1.71   -1.294   -34.39
+idiosyncratic_volatility/kernel_ridge_regression    0.00    0.27    0.011    -1.06
+betting_against_beta/gaussian_process_regression   -1.04    1.32   -0.788   -16.37
+betting_against_beta/kernel_ridge_regression   -0.06    0.38   -0.157    -1.51
+EQUAL-WEIGHTED PORTFOLIO                     -0.01    0.76   -0.015    -2.43
+-----------------------------------------------------------------------------
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_style_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_industry_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_idiosyncratic_momentum.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_style_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_industry_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_idiosyncratic_reversal.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_idiosyncratic_volatility.png
+
+Chart → /home/connerd4/silverfund/Vol-3-final-project/results/recent/performance_betting_against_beta.png
+
+Portfolio overview → /home/connerd4/silverfund/Vol-3-final-project/results/recent/portfolio_overview.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_style_momentum.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_industry_momentum.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_idiosyncratic_momentum.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_style_reversal.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_industry_reversal.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_idiosyncratic_reversal.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_idiosyncratic_volatility.png
+  IC function → /home/connerd4/silverfund/Vol-3-final-project/results/recent/ic_function_betting_against_beta.png

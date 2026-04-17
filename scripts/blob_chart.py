@@ -32,7 +32,7 @@ SNR = 0.05
 NOISE_PROPORTION = 1.0 - SNR / (1.0 + SNR)   # ≈ 0.952
 SIGNAL_PROPORTION = SNR / (1.0 + SNR)          # ≈ 0.048
 N_BINS = 10
-MAX_SCATTER = 40_000   # subsample for readability
+MAX_SCATTER = 25_000   # subsample for readability
 
 
 def _try_load_real() -> tuple[np.ndarray, np.ndarray] | None:
@@ -153,15 +153,15 @@ def main() -> None:
         "font.family": "serif",
         "axes.spines.top": False,
         "axes.spines.right": False,
-        "figure.dpi": 150,
+        "figure.dpi": 100,
     })
 
-    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    fig, ax = plt.subplots(figsize=(8, 5.5), dpi=100)
 
     # Scatter cloud
     ax.scatter(
         zs, ys,
-        s=1.5, alpha=0.08, color="#555555", rasterized=True,
+        s=2.0, alpha=0.12, color="#555555", rasterized=False,
         label=f"$(z_{{i,t}},\\ y_{{i,t}})$ — {n_total:,} obs.",
         zorder=1,
     )
@@ -208,7 +208,7 @@ def main() -> None:
 
     fig.tight_layout()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUTPUT, dpi=300, bbox_inches="tight")
+    fig.savefig(OUTPUT, dpi=200, bbox_inches="tight")
     print(f"Saved → {OUTPUT}")
 
 

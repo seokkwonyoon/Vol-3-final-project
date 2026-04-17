@@ -39,9 +39,9 @@ class KalmanPolyIC(ICModel):
         self.Q = process_noise * np.eye(self.d)
         self.R = obs_noise
 
-        # Initial state: prior centred on IC(z)=0.05*z → β1=0.05, rest=0
+        # Initial state: prior centred on IC(z)=0.05 → β0=0.05 so alpha_z=0.05*z
         self.beta = np.zeros(self.d)
-        self.beta[1] = 0.05               # β1 = 0.05 matches static baseline
+        self.beta[0] = 0.05               # β0 = 0.05 matches static baseline
         self.P = np.eye(self.d) * 1.0    # large initial uncertainty
 
     def _obs_matrix(self, z: np.ndarray) -> np.ndarray:
@@ -58,20 +58,23 @@ class KalmanPolyIC(ICModel):
         if len(z) == 0:
             return
 
-        # 1. Predict step (random walk state transition)
-        P_pred = self.P + self.Q
+        # Predict step (random walk state transition)
+        P_pred = self.P + self.Q         # (d, d)
 
-        # 2. Batch update with all stocks
-        H = self._obs_matrix(z)          # (n, d)
-        S = H @ P_pred @ H.T + self.R * np.eye(len(z))   # (n, n)
-
-        # Kalman gain: K = P_pred @ H.T @ inv(S), shape (d, n)
-        # Solve S @ K.T = H @ P_pred  (S is symmetric, shape (n,n))
-        K = np.linalg.solve(S, H @ P_pred).T             # (d, n)
-
-        innovation = y - H @ self.beta   # (n,)
-        self.beta = self.beta + K @ innovation
-        self.P = (np.eye(self.d) - K @ H) @ P_pred
+        # Information-filter batch update: O(d²n + d³) instead of O(n³).
+        # When d=3 << n≈500 this is a ~20,000× speedup over the n×n solve.
+        #
+        # Information form:
+        #   Lambda_pred = P_pred⁻¹                         (d×d)
+        #   Lambda_new  = Lambda_pred + Hᵀ H / R            (d×d)
+        #   eta_new     = Lambda_pred @ beta + Hᵀ y / R     (d,)
+        #   P_new       = Lambda_new⁻¹,  beta_new = P_new @ eta_new
+        H = self._obs_matrix(z)                    # (n, d)
+        Lambda_pred = np.linalg.inv(P_pred)        # (d, d)
+        Lambda_new = Lambda_pred + (H.T @ H) / self.R
+        eta_new = Lambda_pred @ self.beta + (H.T @ y) / self.R
+        self.P = np.linalg.inv(Lambda_new)
+        self.beta = self.P @ eta_new
 
     def predict(self, z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         H = self._obs_matrix(z)          # (n, d)

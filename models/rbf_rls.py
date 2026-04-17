@@ -59,7 +59,7 @@ class RbfRlsIC(ICModel):
         lam = self.lam
         n = len(z)
         A = lam * np.eye(n) + Phi @ self.P @ Phi.T   # (n, n)
-        K = self.P @ Phi.T @ np.linalg.inv(A)         # (K, n)
+        K = np.linalg.solve(A, Phi @ self.P).T        # (K, n)  — solve is more stable than inv
         self.w = self.w + K @ (y - Phi @ self.w)
         self.P = (self.P - K @ Phi @ self.P) / lam
 
