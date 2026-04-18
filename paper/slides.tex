@@ -26,10 +26,10 @@
 \newcommand{\E}{\mathbb{E}}
 \newcommand{\Var}{\operatorname{Var}}
 
-\title{Modeling the Dynamic Conditional Information Coefficient}
+\title{\textcolor{white}{Modeling the Dynamic Conditional Information Coefficient}}
 \subtitle{Kernel Methods for Equity Return Prediction in Low-SNR Environments}
 \author{Conner B.\ Draper \and Seokkwon Yoon}
-\date{Math 402/436}
+\date{Math 404}
 
 \begin{document}
 
@@ -83,7 +83,7 @@
       \includegraphics[width=\linewidth]{blob_chart.png}\\[-2pt]
       {\footnotesize
         Style momentum signal pooled across all stocks and dates (1995--2025).
-        Red line: OLS $\widehat{\IC}\approx 0.05$ — nearly flat against the noise.
+        Red line: OLS $\widehat{\IC}\approx 0.05$.
       }
     \end{column}
   \end{columns}
@@ -163,8 +163,8 @@
 \begin{frame}{Results: Portfolio Comparison}
   \textbf{Mixture of Experts}: for each signal, pick the model with the highest Sharpe,
   then equal-weight the 8 winners.
-  GPR wins 6 of 8 signals. Static wins idiosyncratic reversal and volatility — signals
-  with the most stable, linear IC.
+  GPR wins 6 of 8 signals. Static wins idiosyncratic reversal and volatility (signals
+  with the most stable, linear IC).
 
   \bigskip
   \begin{center}
@@ -193,14 +193,14 @@
   \end{block}
 
   \begin{block}{3. Societal Brain Drain}
-    Quantitative finance aggressively recruits top-tier STEM talent by offering highly competitive compensation. This siphons intellectual capital away from research areas—such as healthcare, engineering, or climate science—that may offer higher tangible benefits to the public.
+    Quantitative finance aggressively recruits top-tier STEM talent by offering highly competitive compensation. This siphons intellectual capital away from critical research areas that may offer higher tangible benefits to the public (e.g., healthcare, engineering, or climate science).
   \end{block}
 \end{frame}
 
 % ── 10. CONCLUSIONS ───────────────────────────────────────────────────────────
 \begin{frame}{Conclusions}
   \begin{block}{Central finding}
-    $\IC_t(z)$ is non-constant. Kernel methods capture this — but the benefit is signal-specific.
+    $\IC_t(z)$ is non-constant. Kernel methods capture this, but the benefit is signal-specific.
   \end{block}
 
   \bigskip
@@ -211,9 +211,6 @@
     \item \textbf{Static IC wins} when IC is stable and positive (idiosyncratic reversal)
     \item \textbf{Mixture of Experts} routes each signal to its best model: Sharpe $3.58 \to 4.34$
   \end{itemize}
-
-  \vfill
-  \centering\small 10 slides total
 \end{frame}
 
 \end{document}
