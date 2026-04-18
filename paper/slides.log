@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.3.22)  17 APR 2026 16:48
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.3.22)  18 APR 2026 00:30
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -904,58 +904,59 @@ Dictionary: translator-theorem-dictionary, Language: English
 
 {/vapps/rhel9/x86_64/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map}
 ]
-LaTeX Font Info:    Trying to load font information for U+msa on input line 70.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 63.
 
 
 (/vapps/rhel9/x86_64/texlive/2024/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 70.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 63.
 
 
 (/vapps/rhel9/x86_64/texlive/2024/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
-Overfull \vbox (0.71112pt too high) detected at line 70
- []
-
 [2
 
 ]
-<blob_chart.png, id=76, 569.12625pt x 388.8126pt>
+<blob_chart.png, id=49, 570.933pt x 390.258pt>
 File: blob_chart.png Graphic file (type png)
 <use blob_chart.png>
-Package pdftex.def Info: blob_chart.png  used on input line 102.
-(pdftex.def)             Requested size: 199.34116pt x 136.1873pt.
+Package pdftex.def Info: blob_chart.png  used on input line 90.
+(pdftex.def)             Requested size: 281.67096pt x 192.53815pt.
 
-Overfull \vbox (20.87195pt too high) detected at line 102
+Overfull \vbox (7.22276pt too high) detected at line 90
  []
 
 [3
 
  <./blob_chart.png>] [4
 
-]
-Overfull \vbox (7.57912pt too high) detected at line 156
- []
-
-[5
+] [5
 
 ] [6
 
-] [7
-
 ]
-Overfull \vbox (17.50154pt too high) detected at line 240
+<../results/full/performance_moe_portfolio.png, id=79, 787.743pt x 643.203pt>
+File: ../results/full/performance_moe_portfolio.png Graphic file (type png)
+<use ../results/full/performance_moe_portfolio.png>
+Package pdftex.def Info: ../results/full/performance_moe_portfolio.png  used on
+ input line 160.
+(pdftex.def)             Requested size: 381.34485pt x 311.37402pt.
+
+Overfull \vbox (107.10863pt too high) detected at line 160
+ []
+
+[7
+
+ <../results/full/performance_moe_portfolio.png>]
+Overfull \hbox (10.6508pt too wide) in paragraph at lines 183--183
+ [] 
  []
 
 [8
 
-]
-Overfull \vbox (8.86386pt too high) detected at line 261
- []
-
-[9
+] [9
 
 ] [10
 
@@ -974,82 +975,42 @@ Overfull \vbox (8.86386pt too high) detected at line 261
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-03-14>
  ***********
-
-
-Package rerunfilecheck Warning: File `slides.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `slides.out':
-(rerunfilecheck)             Before: C2DFBF826699CEFACD65F15979662AF1;1000
-(rerunfilecheck)             After:  D41D8CD98F00B204E9800998ECF8427E;0.
+Package rerunfilecheck Info: File `slides.out' has not changed.
+(rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 21769 strings out of 474104
- 425279 string characters out of 5741461
- 1940493 words of memory out of 5000000
- 43647 multiletter control sequences out of 15000+600000
- 569879 words of font info for 79 fonts, out of 8000000 for 9000
+ 21779 strings out of 474104
+ 427508 string characters out of 5741461
+ 1938493 words of memory out of 5000000
+ 43667 multiletter control sequences out of 15000+600000
+ 568916 words of font info for 76 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 128i,11n,123p,381b,544s stack positions out of 10000i,1000n,20000p,200000b,200000s
-
-pdfTeX warning (dest): name{Outline0.7} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.6} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.5} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.4} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.3} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.2} has been referenced but does not exist,
- replaced by a fixed one
-
-
-pdfTeX warning (dest): name{Outline0.1} has been referenced but does not exist,
- replaced by a fixed one
-
-</vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmb
-x10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfont
-s/cm/cmbx9.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/
-amsfonts/cm/cmex10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1
-/public/amsfonts/cm/cmmi10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fon
-ts/type1/public/amsfonts/cm/cmmi6.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-d
+ 128i,11n,123p,381b,745s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/c
+mbx10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmex10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/publ
+ic/amsfonts/cmextra/cmex9.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/font
+s/type1/public/amsfonts/cm/cmmi10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-d
 ist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></vapps/rhel9/x86_64/texlive/2024/
 texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></vapps/rhel9/x86_64/texliv
 e/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></vapps/rhel9/x86_64
-/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></vapps/rhel9/
-x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></vapps/
-rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></
-vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss1
-0.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/
-cm/cmss12.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/a
-msfonts/cm/cmss8.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/p
-ublic/amsfonts/cm/cmss9.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/
-type1/public/amsfonts/cm/cmssbx10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-d
-ist/fonts/type1/public/amsfonts/cm/cmssi10.pfb></vapps/rhel9/x86_64/texlive/202
-4/texmf-dist/fonts/type1/public/amsfonts/cm/cmssi9.pfb></vapps/rhel9/x86_64/tex
-live/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></vapps/rhel9/x8
-6_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb></vapps/r
-hel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></
-vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9
-.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/s
-ymbols/msbm10.pfb>
-Output written on slides.pdf (10 pages, 803030 bytes).
+/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></vapps/rhel9/
+x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></vapps/
+rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb>
+</vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cms
+s12.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/amsfont
+s/cm/cmss8.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/public/
+amsfonts/cm/cmss9.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fonts/type1/
+public/amsfonts/cm/cmssbx10.pfb></vapps/rhel9/x86_64/texlive/2024/texmf-dist/fo
+nts/type1/public/amsfonts/cm/cmssi10.pfb></vapps/rhel9/x86_64/texlive/2024/texm
+f-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></vapps/rhel9/x86_64/texlive/2
+024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></vapps/rhel9/x86_64/te
+xlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy9.pfb></vapps/rhel9/x8
+6_64/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
+Output written on slides.pdf (10 pages, 1503319 bytes).
 PDF statistics:
- 249 PDF objects out of 1000 (max. 8388607)
- 168 compressed objects within 2 object streams
- 28 named destinations out of 1000 (max. 500000)
- 182 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 239 PDF objects out of 1000 (max. 8388607)
+ 145 compressed objects within 2 object streams
+ 21 named destinations out of 1000 (max. 500000)
+ 245 words of extra memory for PDF output out of 10000 (max. 10000000)
 
